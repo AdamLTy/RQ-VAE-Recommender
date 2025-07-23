@@ -58,10 +58,9 @@ def train(
 
     # Set device for PaddlePaddle
     if paddle.device.is_compiled_with_cuda():
-        device = "gpu:0"
+        paddle.device.set_device("gpu")
     else:
-        device = "cpu"
-    paddle.device.set_device(device)
+        paddle.device.set_device("cpu")
 
     train_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=force_dataset_process, train_test_split="train" if do_eval else "all", split=dataset_split, data_path=data_path)
     train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size, False)
