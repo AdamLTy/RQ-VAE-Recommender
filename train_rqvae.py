@@ -6,6 +6,7 @@ import swanlab
 
 from data.processed import ItemData
 from data.processed import RecDataset
+from data.h5_dataset import create_h5_dataloader
 from data.utils import batch_to
 from data.utils import cycle
 from data.utils import next_batch
@@ -51,7 +52,13 @@ def train(
     vae_sim_vq=False,
     vae_n_layers=3,
     dataset_split="beauty",
-    data_path=None
+    data_path=None,
+    # H5 dataset parameters
+    use_h5_dataset=False,
+    h5_item_data_path="data/preprocessed/item_data.h5",
+    h5_sequence_data_path="data/preprocessed/sequence.h5",
+    h5_max_seq_len=200,
+    h5_test_ratio=0.2
 ):
     if swanlab_logging:
         params = locals()
@@ -62,17 +69,55 @@ def train(
     else:
         paddle.device.set_device("cpu")
 
-    train_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=force_dataset_process, train_test_split="train" if do_eval else "all", split=dataset_split, data_path=data_path)
-    train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size, False)
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=None, collate_fn=lambda batch: batch)
-    train_dataloader = cycle(train_dataloader)
+    if use_h5_dataset:
+        print("Using H5 pretrained dataset")
+        # Load H5 dataset
+        train_dataloader = create_h5_dataloader(
+            item_data_path=h5_item_data_path,
+            sequence_data_path=h5_sequence_data_path,
+            batch_size=batch_size,
+            max_seq_len=h5_max_seq_len,
+            train_test_split="train" if do_eval else "all",
+            test_ratio=h5_test_ratio,
+            shuffle=True
+        )
+        train_dataloader = cycle(train_dataloader)
+        
+        if do_eval:
+            eval_dataloader = create_h5_dataloader(
+                item_data_path=h5_item_data_path,
+                sequence_data_path=h5_sequence_data_path,
+                batch_size=batch_size,
+                max_seq_len=h5_max_seq_len,
+                train_test_split="test",
+                test_ratio=h5_test_ratio,
+                shuffle=False
+            )
+        
+        # For H5 dataset, we need to get embedding dimension from the data
+        import h5py
+        with h5py.File(h5_item_data_path, 'r') as f:
+            h5_embedding_dim = f.attrs['embedding_dim']
+        vae_input_dim = h5_embedding_dim
+        print(f"H5 dataset embedding dimension: {h5_embedding_dim}")
+        
+        # Set index_dataset to None for H5 (not needed for evaluation in this context)
+        index_dataset = None
+        
+    else:
+        print("Using original dataset format")
+        # Original dataset loading
+        train_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=force_dataset_process, train_test_split="train" if do_eval else "all", split=dataset_split, data_path=data_path)
+        train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size, False)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=None, collate_fn=lambda batch: batch)
+        train_dataloader = cycle(train_dataloader)
 
-    if do_eval:
-        eval_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="eval", split=dataset_split, data_path=data_path)
-        eval_sampler = BatchSampler(RandomSampler(eval_dataset), batch_size, False)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=None, collate_fn=lambda batch: batch)
+        if do_eval:
+            eval_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="eval", split=dataset_split, data_path=data_path)
+            eval_sampler = BatchSampler(RandomSampler(eval_dataset), batch_size, False)
+            eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=None, collate_fn=lambda batch: batch)
 
-    index_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="all", split=dataset_split, data_path=data_path) if do_eval else train_dataset
+        index_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="all", split=dataset_split, data_path=data_path) if do_eval else train_dataset
 
     model = RqVae(
         input_dim=vae_input_dim,
