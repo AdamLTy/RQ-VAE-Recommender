@@ -39,13 +39,13 @@ def eval_mode(fn):
     return inner
 
 
-def select_columns_per_row(x: Tensor, indices: Tensor) -> torch.Tensor:
+def select_columns_per_row(x: Tensor, indices: Tensor) -> paddle.Tensor:
     assert x.shape[0] == indices.shape[0]
     assert indices.shape[1] <= x.shape[1]
 
     B = x.shape[0]
     return x[
-        rearrange(torch.arange(B, device=x.device), "B -> B 1"), indices
+        rearrange(paddle.arange(B), "B -> B 1"), indices
     ]
 
 
@@ -62,12 +62,12 @@ def parse_config():
     gin.parse_config_file(args.config_path)
 
 
-@torch.no_grad
+@paddle.no_grad()
 def compute_debug_metrics(batch: TokenizedSeqBatch, model_output = None, prefix: str = "") -> dict:
-    seq_lengths = batch.seq_mask.sum(axis=1).to(torch.float32)
+    seq_lengths = batch.seq_mask.sum(axis=1).astype(paddle.float32)
     prefix = prefix + "_"
     debug_metrics = {
-        prefix + f"seq_length_p{q}": torch.quantile(seq_lengths, q=q).detach().cpu().item() 
+        prefix + f"seq_length_p{q}": paddle.quantile(seq_lengths, q=q).detach().cpu().item() 
         for q in [0.25, 0.5, 0.75, 0.9, 1]
     }
     if model_output is not None:
