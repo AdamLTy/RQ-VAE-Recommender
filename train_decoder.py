@@ -1,7 +1,7 @@
 import argparse
 import os
 import gin
-import torch
+import paddle
 import swanlab
 
 from accelerate import Accelerator

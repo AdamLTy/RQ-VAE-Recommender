@@ -1,9 +1,9 @@
 import argparse
 import gin
-import torch
+import paddle
 from data.schemas import TokenizedSeqBatch
 from einops import rearrange
-from torch import Tensor
+from paddle import Tensor
 
 
 def reset_kv_cache(fn):

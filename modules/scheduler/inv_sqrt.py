@@ -1,5 +1,5 @@
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
+from paddle.optimizer import Optimizer
+from paddle.optimizer.lr import LRScheduler
 
 
 class InverseSquareRootScheduler(LRScheduler):

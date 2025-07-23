@@ -1,5 +1,5 @@
 import gin
-import torch
+import paddle
 
 from einops import rearrange
 from enum import Enum

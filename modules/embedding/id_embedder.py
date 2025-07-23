@@ -1,8 +1,8 @@
-import torch
+import paddle
 
 from data.schemas import TokenizedSeqBatch
-from torch import nn
-from torch import Tensor
+from paddle import nn
+from paddle import Tensor
 from typing import NamedTuple
 
 

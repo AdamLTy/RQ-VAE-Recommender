@@ -1,15 +1,18 @@
-import torch
-import torch.nn.functional as F
+import paddle
+import paddle.nn.functional as F
 
 from ops.triton.jagged import jagged_to_flattened_tensor
 from ops.triton.jagged import padded_to_jagged_tensor
-from torch import nn
-from torch import Tensor
-from torch.nested import Tensor as NestedTensor
+from paddle import nn
+from paddle import Tensor
+# TODO: Handle nested tensor equivalent in Paddle
+# from paddle.nested import Tensor as NestedTensor
+NestedTensor = Tensor  # Temporary fallback
 from typing import Optional
 from typing import Union
 
-torch.backends.cuda.enable_flash_sdp(True)
+# TODO: Enable equivalent optimization in Paddle
+# paddle.backends.cuda.enable_flash_sdp(True)
 
 AttentionInput = Union[Tensor, NestedTensor]
 

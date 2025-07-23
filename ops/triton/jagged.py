@@ -1,10 +1,12 @@
-import torch
+import paddle
 import triton
 import triton.language as tl
 
-from torch import Tensor
-from torch.autograd import Function
-from torch.nested import Tensor as NestedTensor
+from paddle import Tensor
+from paddle.autograd import Function
+# TODO: Handle nested tensor equivalent in Paddle
+# from paddle.nested import Tensor as NestedTensor
+NestedTensor = Tensor  # Temporary fallback
 
 
 class PaddedToJaggedTensor(Function):

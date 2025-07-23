@@ -5,12 +5,24 @@ import os
 import os.path as osp
 import pandas as pd
 import polars as pl
-import torch
+import paddle
 
 from collections import defaultdict
 from data.preprocessing import PreprocessingMixin
-from torch_geometric.data import HeteroData
-from torch_geometric.data import InMemoryDataset
+# TODO: Convert to PaddleGraph equivalents
+# from torch_geometric.data import HeteroData
+# from torch_geometric.data import InMemoryDataset
+try:
+    from paddle_graph.data import HeteroData
+    from paddle_graph.data import InMemoryDataset
+except ImportError:
+    # Fallback or placeholder classes
+    class HeteroData:
+        def __init__(self):
+            pass
+    class InMemoryDataset:
+        def __init__(self, *args, **kwargs):
+            pass
 from typing import Callable
 from typing import List
 from typing import Optional

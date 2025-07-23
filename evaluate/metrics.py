@@ -1,6 +1,6 @@
 from collections import defaultdict
 from einops import rearrange
-from torch import Tensor
+from paddle import Tensor
 
 
 class TopKAccumulator:

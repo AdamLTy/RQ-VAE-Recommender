@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-import torch
+import paddle
 from data.schemas import FUT_SUFFIX
 from einops import rearrange
 from sentence_transformers import SentenceTransformer

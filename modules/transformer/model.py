@@ -4,8 +4,8 @@ from modules.transformer.attention import AttentionInput
 from modules.transformer.attention import MultiHeadAttention
 from typing import List
 from typing import Optional
-from torch import nn
-from torch import Tensor
+from paddle import nn
+from paddle import Tensor
 
 
 class KVCacheOpsMixin:

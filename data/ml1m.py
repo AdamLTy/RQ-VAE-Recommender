@@ -1,9 +1,18 @@
 import pandas as pd
-import torch
+import paddle
 
 from data.preprocessing import PreprocessingMixin
-from torch_geometric.data import HeteroData
-from torch_geometric.datasets import MovieLens1M
+# TODO: Convert to PaddleGraph equivalents
+try:
+    from paddle_graph.data import HeteroData
+    from paddle_graph.datasets import MovieLens1M
+except ImportError:
+    class HeteroData:
+        def __init__(self):
+            pass
+    class MovieLens1M:
+        def __init__(self, *args, **kwargs):
+            pass
 
 
 class RawMovieLens1M(MovieLens1M, PreprocessingMixin):

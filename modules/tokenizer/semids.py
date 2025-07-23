@@ -1,5 +1,5 @@
 import math
-import torch
+import paddle
 
 from data.processed import ItemData
 from data.processed import SeqData
@@ -12,7 +12,7 @@ from modules.utils import eval_mode
 from modules.rqvae import RqVae
 from typing import List
 from typing import Optional
-from torch import nn
+from paddle import nn
 from torch import Tensor
 from torch.utils.data import BatchSampler
 from torch.utils.data import DataLoader
