@@ -62,7 +62,8 @@ def train(
     push_vae_to_hf=False,
     train_data_subsample=True,
     model_jagged_mode=True,
-    vae_hf_model_name="edobotta/rqvae-amazon-beauty"
+    vae_hf_model_name="edobotta/rqvae-amazon-beauty",
+    data_path=None
 ):  
     if dataset != RecDataset.AMAZON:
         raise Exception(f"Dataset currently not supported: {dataset}.")
@@ -87,21 +88,24 @@ def train(
         root=dataset_folder,
         dataset=dataset,
         force_process=force_dataset_process,
-        split=dataset_split
+        split=dataset_split,
+        data_path=data_path
     )
     train_dataset = SeqData(
         root=dataset_folder, 
         dataset=dataset, 
         is_train=True, 
         subsample=train_data_subsample, 
-        split=dataset_split
+        split=dataset_split,
+        data_path=data_path
     )
     eval_dataset = SeqData(
         root=dataset_folder, 
         dataset=dataset, 
         is_train=False, 
         subsample=False, 
-        split=dataset_split
+        split=dataset_split,
+        data_path=data_path
     )
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

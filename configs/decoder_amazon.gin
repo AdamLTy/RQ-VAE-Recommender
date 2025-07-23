@@ -18,6 +18,8 @@ train.pretrained_rqvae_path="trained_models/rqvae_amazon_beauty/checkpoint_high_
 # train.pretrained_decoder_path="trained_models/transformer_amazon_beauty/checkpoint_199999.pt"
 train.save_dir_root="out/decoder/amazon/"
 train.dataset_folder="dataset/amazon"
+# Alternative: Use custom data path (overrides dataset_folder if set)
+# train.data_path="/path/to/your/data/disk/amazon"
 train.dataset=%data.processed.RecDataset.AMAZON
 train.force_dataset_process=False
 train.full_eval_every=10000

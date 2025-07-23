@@ -15,6 +15,8 @@ train.vae_sim_vq=False
 train.save_model_every=10000
 train.eval_every=10000
 train.dataset_folder="dataset/ml-32m"
+# Alternative: Use custom data path (overrides dataset_folder if set)
+# train.data_path="/path/to/your/data/disk/ml-32m"
 train.dataset=%data.processed.RecDataset.ML_32M
 train.save_dir_root="out/rqvae/ml32m/"
 train.swanlab_logging=True

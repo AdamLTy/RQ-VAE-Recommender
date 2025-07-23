@@ -44,13 +44,16 @@ class ItemData(Dataset):
         force_process: bool = False,
         dataset: RecDataset = RecDataset.ML_1M,
         train_test_split: str = "all",
+        data_path: Optional[str] = None,
         **kwargs
     ) -> None:
         
         raw_dataset_class = DATASET_NAME_TO_RAW_DATASET[dataset]
         max_seq_len = DATASET_NAME_TO_MAX_SEQ_LEN[dataset]
 
-        raw_data = raw_dataset_class(root=root, *args, **kwargs)
+        # Use custom data path if provided, otherwise use root
+        data_root = data_path if data_path is not None else root
+        raw_data = raw_dataset_class(root=data_root, *args, **kwargs)
         
         processed_data_path = raw_data.processed_paths[0]
         if not os.path.exists(processed_data_path) or force_process:
@@ -90,6 +93,7 @@ class SeqData(Dataset):
         subsample: bool = False,
         force_process: bool = False,
         dataset: RecDataset = RecDataset.ML_1M,
+        data_path: Optional[str] = None,
         **kwargs
     ) -> None:
         
@@ -98,7 +102,9 @@ class SeqData(Dataset):
         raw_dataset_class = DATASET_NAME_TO_RAW_DATASET[dataset]
         max_seq_len = DATASET_NAME_TO_MAX_SEQ_LEN[dataset]
 
-        raw_data = raw_dataset_class(root=root, *args, **kwargs)
+        # Use custom data path if provided, otherwise use root
+        data_root = data_path if data_path is not None else root
+        raw_data = raw_dataset_class(root=data_root, *args, **kwargs)
 
         processed_data_path = raw_data.processed_paths[0]
         if not os.path.exists(processed_data_path) or force_process:
