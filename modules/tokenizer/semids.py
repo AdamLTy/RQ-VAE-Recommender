@@ -13,14 +13,13 @@ from modules.rqvae import RqVae
 from typing import List
 from typing import Optional
 from paddle import nn
-from torch import Tensor
-from torch.utils.data import BatchSampler
-from torch.utils.data import DataLoader
-from torch.utils.data import SequentialSampler
+from paddle import Tensor
+from paddle.io import BatchSampler
+from paddle.io import DataLoader
 
 BATCH_SIZE = 16
 
-class SemanticIdTokenizer(nn.Module):
+class SemanticIdTokenizer(nn.Layer):
     """
         Tokenizes a batch of sequences of item features into a batch of sequences of semantic ids.
     """
