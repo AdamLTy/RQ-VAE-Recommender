@@ -9,11 +9,8 @@ import torch
 
 from collections import defaultdict
 from data.preprocessing import PreprocessingMixin
-from torch_geometric.data import download_google_url
-from torch_geometric.data import extract_zip
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.io import fs
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -26,9 +23,6 @@ def parse(path):
 
 
 class AmazonReviews(InMemoryDataset, PreprocessingMixin):
-    gdrive_id = "1qGxgmx7G_WB7JE4Cn_bEcZ_o_NAJLE3G"
-    gdrive_filename = "P5_data.zip"
-
     def __init__(
         self,
         root: str,
@@ -52,12 +46,16 @@ class AmazonReviews(InMemoryDataset, PreprocessingMixin):
         return f'data_{self.split}.pt'
     
     def download(self) -> None:
-        path = download_google_url(self.gdrive_id, self.root, self.gdrive_filename)
-        extract_zip(path, self.root)
-        os.remove(path)
-        folder = osp.join(self.root, 'data')
-        fs.rm(self.raw_dir)
-        os.rename(folder, self.raw_dir)
+        # Data should be pre-downloaded and placed in raw directory
+        # Expected structure: root/raw/{split}/
+        # Files: sequential_data.txt, datamaps.json, meta.json.gz
+        raw_split_dir = osp.join(self.raw_dir, self.split)
+        if not osp.exists(raw_split_dir):
+            raise FileNotFoundError(
+                f"Data not found at {raw_split_dir}. "
+                f"Please download and extract Amazon {self.split} dataset to {raw_split_dir}. "
+                f"Required files: sequential_data.txt, datamaps.json, meta.json.gz"
+            )
     
     def _remap_ids(self, x):
         return x - 1

@@ -6,15 +6,10 @@ import torch
 from data.preprocessing import PreprocessingMixin
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.data import download_url
-from torch_geometric.data import extract_zip
-from torch_geometric.io import fs
 from typing import Callable, List, Optional
 
 
 class MovieLens32M(InMemoryDataset):
-    url = 'https://files.grouplens.org/datasets/movielens/ml-32m.zip'
-
     def __init__(
         self,
         root: str,
@@ -39,12 +34,18 @@ class MovieLens32M(InMemoryDataset):
         return not os.path.exists(self.processed_paths[0])
     
     def download(self) -> None:
-        path = download_url(self.url, self.root)
-        extract_zip(path, self.root)
-        os.remove(path)
-        folder = osp.join(self.root, 'ml-32m')
-        fs.rm(self.raw_dir)
-        os.rename(folder, self.raw_dir)
+        # Data should be pre-downloaded and placed in raw directory
+        # Expected structure: root/raw/
+        # Files: links.csv, movies.csv, ratings.csv, tags.csv
+        required_files = ['links.csv', 'movies.csv', 'ratings.csv', 'tags.csv']
+        for file in required_files:
+            file_path = osp.join(self.raw_dir, file)
+            if not osp.exists(file_path):
+                raise FileNotFoundError(
+                    f"Data file not found at {file_path}. "
+                    f"Please download and extract MovieLens 32M dataset to {self.raw_dir}. "
+                    f"Required files: {', '.join(required_files)}"
+                )
 
     def process():
         pass
