@@ -19,7 +19,22 @@ except ImportError:
     # Fallback or placeholder classes
     class HeteroData:
         def __init__(self):
+            self._data = {}
+        
+        def __getitem__(self, key):
+            if key not in self._data:
+                self._data[key] = HeteroNodeData()
+            return self._data[key]
+        
+        def __setitem__(self, key, value):
+            self._data[key] = value
+    
+    class HeteroNodeData:
+        def __init__(self):
             pass
+        
+        def __setattr__(self, name, value):
+            object.__setattr__(self, name, value)
     class InMemoryDataset:
         def __init__(self, root=None, transform=None, pre_transform=None, force_reload=False):
             self.root = root
