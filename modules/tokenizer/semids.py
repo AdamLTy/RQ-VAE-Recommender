@@ -70,7 +70,7 @@ class SemanticIdTokenizer(nn.Layer):
     def sem_ids_dim(self):
         return self.n_layers + 1
     
-    @torch.no_grad
+    @paddle.no_grad()
     @eval_mode
     def precompute_corpus_ids(self, movie_dataset: ItemData) -> Tensor:
         cached_ids = None
@@ -83,7 +83,7 @@ class SemanticIdTokenizer(nn.Layer):
             batch_ids = self.forward(batch_to(batch, self.rq_vae.device)).sem_ids
             # Detect in-batch duplicates
             is_hit = self._get_hits(batch_ids, batch_ids)
-            hits = torch.tril(is_hit, diagonal=-1).sum(axis=-1)
+            hits = paddle.tril(is_hit, diagonal=-1).sum(axis=-1)
             assert hits.min() >= 0
             if cached_ids is None:
                 cached_ids = batch_ids.clone()
@@ -99,7 +99,7 @@ class SemanticIdTokenizer(nn.Layer):
         
         return self.cached_ids
 
-    @torch.no_grad
+    @paddle.no_grad()
     @eval_mode
     def exists_prefix(self, sem_id_prefix: Tensor) -> Tensor:
         if self.cached_ids is None:
@@ -107,7 +107,7 @@ class SemanticIdTokenizer(nn.Layer):
 
         prefix_length = sem_id_prefix.shape[-1]
         prefix_cache = self.cached_ids[:, :prefix_length]
-        out = torch.zeros(*sem_id_prefix.shape[:-1], dtype=bool, device=sem_id_prefix.device)
+        out = paddle.zeros(sem_id_prefix.shape[:-1], dtype=paddle.bool)
         
         # Batch prefixes matching to avoid OOM. 
         batches = math.ceil(sem_id_prefix.shape[0] // BATCH_SIZE)
@@ -121,7 +121,7 @@ class SemanticIdTokenizer(nn.Layer):
     def _tokenize_seq_batch_from_cached(self, ids: Tensor) -> Tensor:
         return rearrange(self.cached_ids[ids.flatten(), :], "(b n) d -> b (n d)", n=ids.shape[1])
     
-    @torch.no_grad
+    @paddle.no_grad()
     @eval_mode
     def forward(self, batch: SeqBatch) -> TokenizedSeqBatch:
         # TODO: Handle output inconstency in If-else.
@@ -141,8 +141,8 @@ class SemanticIdTokenizer(nn.Layer):
 
             sem_ids_fut = self._tokenize_seq_batch_from_cached(batch.ids_fut)
         
-        token_type_ids = torch.arange(D, device=sem_ids.device).repeat(B, N)
-        token_type_ids_fut = torch.arange(D, device=sem_ids.device).repeat(B, 1)
+        token_type_ids = paddle.arange(D).tile([B, N])
+        token_type_ids_fut = paddle.arange(D).tile([B, 1])
         return TokenizedSeqBatch(
             user_ids=batch.user_ids,
             sem_ids=sem_ids,
