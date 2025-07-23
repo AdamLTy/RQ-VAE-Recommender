@@ -2,7 +2,7 @@ import argparse
 import os
 import gin
 import torch
-import wandb
+import swanlab
 
 from accelerate import Accelerator
 from data.processed import ItemData
@@ -38,7 +38,7 @@ def train(
     pretrained_decoder_path=None,
     split_batches=True,
     amp=False,
-    wandb_logging=False,
+    swanlab_logging=False,
     force_dataset_process=False,
     mixed_precision_type="fp16",
     gradient_accumulate_every=1,
@@ -67,7 +67,7 @@ def train(
     if dataset != RecDataset.AMAZON:
         raise Exception(f"Dataset currently not supported: {dataset}.")
 
-    if wandb_logging:
+    if swanlab_logging:
         params = locals()
 
     accelerator = Accelerator(
@@ -77,9 +77,8 @@ def train(
 
     device = accelerator.device
 
-    if wandb_logging and accelerator.is_main_process:
-        wandb.login()
-        run = wandb.init(
+    if swanlab_logging and accelerator.is_main_process:
+        run = swanlab.init(
             project="gen-retrieval-decoder-training",
             config=params
         )
@@ -187,7 +186,7 @@ def train(
                     loss = model_output.loss / gradient_accumulate_every
                     total_loss += loss
                 
-                if wandb_logging and accelerator.is_main_process:
+                if swanlab_logging and accelerator.is_main_process:
                     train_debug_metrics = compute_debug_metrics(tokenized_data, model_output)
 
                 accelerator.backward(total_loss)
@@ -212,10 +211,10 @@ def train(
                     with torch.no_grad():
                         model_output_eval = model(tokenized_data)
 
-                    if wandb_logging and accelerator.is_main_process:
+                    if swanlab_logging and accelerator.is_main_process:
                         eval_debug_metrics = compute_debug_metrics(tokenized_data, model_output_eval, "eval")
                         eval_debug_metrics["eval_loss"] = model_output_eval.loss.detach().cpu().item()
-                        wandb.log(eval_debug_metrics)
+                        swanlab.log(eval_debug_metrics)
 
             if (iter+1) % full_eval_every == 0:
                 model.eval()
@@ -230,14 +229,14 @@ def train(
 
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)
 
-                        if accelerator.is_main_process and wandb_logging:
-                            wandb.log(eval_debug_metrics)
+                        if accelerator.is_main_process and swanlab_logging:
+                            swanlab.log(eval_debug_metrics)
                 
                 eval_metrics = metrics_accumulator.reduce()
                 
                 print(eval_metrics)
-                if accelerator.is_main_process and wandb_logging:
-                    wandb.log(eval_metrics)
+                if accelerator.is_main_process and swanlab_logging:
+                    swanlab.log(eval_metrics)
                 
                 metrics_accumulator.reset()
 
@@ -255,8 +254,8 @@ def train(
 
                     torch.save(state, save_dir_root + f"checkpoint_{iter}.pt")
                 
-                if wandb_logging:
-                    wandb.log({
+                if swanlab_logging:
+                    swanlab.log({
                         "learning_rate": optimizer.param_groups[0]["lr"],
                         "total_loss": total_loss.cpu().item(),
                         **train_debug_metrics
@@ -264,8 +263,8 @@ def train(
 
             pbar.update(1)
     
-    if wandb_logging:
-        wandb.finish()
+    if swanlab_logging:
+        swanlab.finish()
 
 
 if __name__ == "__main__":

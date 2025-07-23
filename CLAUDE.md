@@ -43,7 +43,7 @@ No formal test suite is provided. The training scripts include evaluation metric
 - Decoder training includes top-k accuracy metrics
 
 ### Monitoring Training
-Both training scripts support W&B logging when `wandb_logging=True` is set in gin configs.
+Both training scripts support SwanLab logging when `swanlab_logging=True` is set in gin configs.
 
 ## Architecture Overview
 

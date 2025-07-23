@@ -2,7 +2,7 @@ import gin
 import os
 import torch
 import numpy as np
-import wandb
+import swanlab
 
 from accelerate import Accelerator
 from data.processed import ItemData
@@ -34,7 +34,7 @@ def train(
     use_kmeans_init=True,
     split_batches=True,
     amp=False,
-    wandb_logging=False,
+    swanlab_logging=False,
     do_eval=True,
     force_dataset_process=False,
     mixed_precision_type="fp16",
@@ -53,7 +53,7 @@ def train(
     vae_n_layers=3,
     dataset_split="beauty"
 ):
-    if wandb_logging:
+    if swanlab_logging:
         params = locals()
 
     accelerator = Accelerator(
@@ -98,9 +98,8 @@ def train(
         weight_decay=weight_decay
     )
 
-    if wandb_logging and accelerator.is_main_process:
-        wandb.login()
-        run = wandb.init(
+    if swanlab_logging and accelerator.is_main_process:
+        run = swanlab.init(
             project="rq-vae-training",
             config=params
         )
@@ -172,7 +171,7 @@ def train(
             accelerator.wait_for_everyone()
 
             id_diversity_log = {}
-            if accelerator.is_main_process and wandb_logging:
+            if accelerator.is_main_process and swanlab_logging:
                 # Compute logs depending on training model_output here to avoid cuda graph overwrite from eval graph.
                 emb_norms_avg = model_output.embs_norm.mean(axis=0)
                 emb_norms_avg_log = {
@@ -238,16 +237,16 @@ def train(
                     id_diversity_log["rqvae_entropy"] = rqvae_entropy.cpu().item()
                     id_diversity_log["max_id_duplicates"] = max_duplicates.cpu().item()
                 
-                if wandb_logging:
-                    wandb.log({
+                if swanlab_logging:
+                    swanlab.log({
                         **train_log,
                         **id_diversity_log
                     })
 
             pbar.update(1)
     
-    if wandb_logging:
-        wandb.finish()
+    if swanlab_logging:
+        swanlab.finish()
 
 
 if __name__ == "__main__":
