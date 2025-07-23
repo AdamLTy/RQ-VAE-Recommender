@@ -85,6 +85,15 @@ class H5PretrainedDataset:
             sequences_raw = [f['sequences'][i] for i in range(len(f['sequences']))]
             sequence_lengths = f['sequence_lengths'][:]
             
+            # Try to load timestamps if available
+            self.has_timestamps = 'timestamps' in f
+            if self.has_timestamps:
+                timestamps_raw = [f['timestamps'][i] for i in range(len(f['timestamps']))]
+                print("Found timestamps in sequence data - will use time-based splitting")
+            else:
+                timestamps_raw = None
+                print("No timestamps found - using simple index-based splitting")
+            
             # Load metadata
             self.n_sequences = f.attrs['n_sequences']
             self.max_sequence_length = f.attrs['max_sequence_length']
@@ -92,8 +101,11 @@ class H5PretrainedDataset:
         # Filter sequences and convert item IDs to indices
         self.processed_sequences = []
         self.user_ids = []
+        self.sequence_timestamps = []
         
-        for user_id, seq, seq_len in zip(user_ids_raw, sequences_raw, sequence_lengths):
+        timestamp_iter = timestamps_raw if self.has_timestamps else [None] * len(user_ids_raw)
+        
+        for user_id, seq, seq_len, timestamps in zip(user_ids_raw, sequences_raw, sequence_lengths, timestamp_iter):
             # Convert item IDs to indices, skip unknown items
             item_indices = []
             for item_id in seq:
@@ -105,75 +117,86 @@ class H5PretrainedDataset:
                 self.processed_sequences.append(item_indices)
                 self.user_ids.append(user_id)
                 
+                # Store max timestamp for this sequence (for time-based splitting)
+                if self.has_timestamps and timestamps is not None:
+                    max_timestamp = max(timestamps) if len(timestamps) > 0 else 0
+                    self.sequence_timestamps.append(max_timestamp)
+                else:
+                    # Use sequence index as fallback timestamp
+                    self.sequence_timestamps.append(len(self.processed_sequences) - 1)
+                
         print(f"Processed {len(self.processed_sequences)} valid sequences")
         
     def _create_train_test_split(self):
-        """Create train/test split based on configuration."""
-        n_sequences = len(self.processed_sequences)
-        n_test = int(n_sequences * self.test_ratio)
-        n_train = n_sequences - n_test
+        """Create train/test split like original dataset - based on sequence-internal temporal order."""
+        # In the original dataset, the split logic is:
+        # - For training: use full sequences with target=-1 
+        # - For eval: use sequence[:-1] with target=sequence[-1]
+        # - All sequences are used in both training and eval, but processed differently
         
-        if self.train_test_split == "train":
-            self.active_sequences = self.processed_sequences[:n_train]
-            self.active_user_ids = self.user_ids[:n_train] 
-        elif self.train_test_split == "test":
-            self.active_sequences = self.processed_sequences[n_train:]
-            self.active_user_ids = self.user_ids[n_train:]
-        else:  # "all"
-            self.active_sequences = self.processed_sequences
-            self.active_user_ids = self.user_ids
-            
+        # Keep all sequences active since we'll handle train/test split at sample level
+        self.active_sequences = self.processed_sequences
+        self.active_user_ids = self.user_ids
+        
         print(f"Active dataset size: {len(self.active_sequences)} sequences")
+        print("Using sequence-internal temporal splitting (like original dataset)")
         
     def __len__(self):
-        """Return number of training samples."""
-        total_samples = 0
-        for seq in self.active_sequences:
-            # Each sequence can generate multiple training samples
-            seq_len = min(len(seq), self.max_seq_len + 1)
-            if seq_len >= 2:
-                total_samples += seq_len - 1
-        return total_samples
+        """Return number of samples based on train_test_split mode."""
+        if self.train_test_split == "train":
+            # Training mode: each sequence generates 1 sample (full sequence with target=-1)
+            return len([seq for seq in self.active_sequences if len(seq) >= 2])
+        elif self.train_test_split == "test":
+            # Test mode: each sequence generates 1 sample (sequence[:-1] with target=sequence[-1])
+            return len([seq for seq in self.active_sequences if len(seq) >= 2])
+        else:  # "all"
+            # All mode: each sequence generates 2 samples (1 train + 1 eval)
+            return 2 * len([seq for seq in self.active_sequences if len(seq) >= 2])
         
     def __getitem__(self, idx: int) -> SeqBatch:
         """
-        Get a single training sample.
+        Get a single sample based on train_test_split mode (like original dataset).
         
-        Returns a SeqBatch with:
-        - user_ids: User ID tensor
-        - ids: Item ID sequence 
-        - ids_fut: Future item IDs
-        - x: Item embedding sequence
-        - x_fut: Future item embeddings
-        - seq_mask: Sequence mask
+        Training mode: full sequence with target=-1
+        Test mode: sequence[:-1] with target=sequence[-1]
+        All mode: alternates between train and test samples
         """
-        # Map flat index to sequence and position
-        current_idx = 0
-        for seq_idx, seq in enumerate(self.active_sequences):
-            seq_len = min(len(seq), self.max_seq_len + 1)
-            if seq_len < 2:
-                continue
-                
-            n_samples = seq_len - 1
-            if current_idx + n_samples > idx:
-                # Found the sequence
-                pos_in_seq = idx - current_idx
-                break
-            current_idx += n_samples
-        else:
-            raise IndexError(f"Index {idx} out of range")
+        # Filter valid sequences
+        valid_sequences = [(i, seq) for i, seq in enumerate(self.active_sequences) if len(seq) >= 2]
+        
+        if self.train_test_split == "train":
+            # Training mode: each sequence -> 1 training sample
+            if idx >= len(valid_sequences):
+                raise IndexError(f"Index {idx} out of range")
+            seq_idx, seq = valid_sequences[idx]
+            is_train_sample = True
             
-        # Extract sequence segment
-        seq = self.active_sequences[seq_idx]
+        elif self.train_test_split == "test":
+            # Test mode: each sequence -> 1 test sample  
+            if idx >= len(valid_sequences):
+                raise IndexError(f"Index {idx} out of range")
+            seq_idx, seq = valid_sequences[idx]
+            is_train_sample = False
+            
+        else:  # "all"
+            # All mode: each sequence generates 2 samples
+            n_valid = len(valid_sequences)
+            if idx >= 2 * n_valid:
+                raise IndexError(f"Index {idx} out of range")
+            seq_idx, seq = valid_sequences[idx // 2]
+            is_train_sample = (idx % 2 == 0)  # Even indices are training samples
+        
         user_id = self.active_user_ids[seq_idx]
         
-        # Create input and target sequences
-        start_pos = max(0, pos_in_seq + 1 - self.max_seq_len)
-        end_pos = pos_in_seq + 1
-        target_pos = pos_in_seq + 1
-        
-        input_seq = seq[start_pos:end_pos]
-        target_item = seq[target_pos] if target_pos < len(seq) else -1
+        if is_train_sample:
+            # Training sample: use full sequence (up to max_seq_len), target=-1
+            input_seq = seq[-self.max_seq_len:] if len(seq) > self.max_seq_len else seq
+            target_item = -1
+        else:
+            # Test sample: use sequence[:-1] (up to max_seq_len), target=sequence[-1]
+            seq_without_last = seq[:-1]
+            input_seq = seq_without_last[-self.max_seq_len:] if len(seq_without_last) > self.max_seq_len else seq_without_last
+            target_item = seq[-1]
         
         # Pad sequence if needed
         actual_len = len(input_seq)
@@ -183,7 +206,7 @@ class H5PretrainedDataset:
         # Create tensors
         ids = paddle.to_tensor(input_seq, dtype=paddle.int64)
         ids_fut = paddle.to_tensor([target_item], dtype=paddle.int64)
-        user_ids = paddle.to_tensor([hash(user_id) % (2**31)], dtype=paddle.int64)  # Simple hash for user ID
+        user_ids = paddle.to_tensor([hash(user_id) % (2**31)], dtype=paddle.int64)
         
         # Get embeddings for valid items
         x = paddle.zeros([self.max_seq_len, self.embedding_dim], dtype=paddle.float32)

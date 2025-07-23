@@ -76,6 +76,7 @@ attrs['original_order_preserved']: bool
 'user_ids': shape=(n_sequences,), dtype=vlen string
 'sequences': shape=(n_sequences,), dtype=vlen np.int64
 'sequence_lengths': shape=(n_sequences,), dtype=np.int32
+'timestamps': shape=(n_sequences,), dtype=vlen np.int64  # 可选，用于时间划分
 
 # 属性
 attrs['n_sequences']: int
@@ -85,12 +86,38 @@ attrs['avg_sequence_length']: float
 attrs['order_preserved']: bool
 ```
 
+**重要说明**: 
+- `timestamps`字段是**可选的**，如果存在，会使用基于时间的数据划分（推荐）
+- 如果没有`timestamps`字段，会退化为基于索引的简单划分
+- `timestamps[i]`包含第i个序列中每个交互的时间戳数组
+
+## 数据划分策略
+
+### 序列内部时间划分（与原始数据集一致）
+H5数据集现在使用与原始数据集完全相同的划分策略：
+
+- **训练样本**: 使用完整序列，目标设为-1
+  - 输入: `[item1, item2, ..., itemN]`
+  - 目标: `-1`
+  
+- **验证样本**: 使用序列前N-1个items，目标为最后一个item  
+  - 输入: `[item1, item2, ..., itemN-1]`
+  - 目标: `itemN`
+
+**优势**:
+- ✅ 完全符合原始数据集的时间顺序逻辑
+- ✅ 避免数据泄露，符合推荐系统真实场景
+- ✅ 每个用户序列都参与训练和验证
+
 ## 训练流程
 
 1. **数据加载**: H5数据集加载器读取预训练embeddings和用户序列
-2. **序列处理**: 将用户序列切分为训练样本，每个样本包含输入序列和目标商品
-3. **Embedding获取**: 直接使用预训练的embedding，无需重新计算
-4. **模型训练**: RQ-VAE模型学习将embeddings量化为语义ID
+2. **序列划分**: 每个序列生成训练样本和验证样本
+3. **样本生成**: 
+   - 训练时: 使用完整序列学习重构
+   - 验证时: 使用前N-1个items预测最后一个item
+4. **Embedding获取**: 直接使用预训练的embedding，无需重新计算
+5. **模型训练**: RQ-VAE模型学习将embeddings量化为语义ID
 
 ## 性能优势
 
@@ -116,10 +143,19 @@ attrs['order_preserved']: bool
 import h5py
 
 with h5py.File('data/preprocessed/item_data.h5', 'r') as f:
-    print("数据集:", list(f.keys()))
-    print("属性:", dict(f.attrs))
+    print("Item数据集:", list(f.keys()))
+    print("Item属性:", dict(f.attrs))
     print("Item数量:", f.attrs['n_items'])
     print("Embedding维度:", f.attrs['embedding_dim'])
+
+with h5py.File('data/preprocessed/sequence.h5', 'r') as f:
+    print("Sequence数据集:", list(f.keys()))
+    print("Sequence属性:", dict(f.attrs))
+    print("是否包含timestamps:", 'timestamps' in f)
+    if 'timestamps' in f:
+        print("将使用时间划分")
+    else:
+        print("将使用索引划分")
 ```
 
 ## 示例代码
