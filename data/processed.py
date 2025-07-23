@@ -1,15 +1,15 @@
 import gin
 import os
 import random
-import torch
+import paddle
 
 from data.amazon import AmazonReviews
 from data.ml1m import RawMovieLens1M
 from data.ml32m import RawMovieLens32M
 from data.schemas import SeqBatch
 from enum import Enum
-from torch import Tensor
-from torch.utils.data import Dataset
+from paddle import Tensor
+from paddle.io import Dataset
 from typing import Optional
 
 PROCESSED_MOVIE_LENS_SUFFIX = "/processed/data.pt"
