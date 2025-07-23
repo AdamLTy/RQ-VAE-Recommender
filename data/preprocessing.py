@@ -61,7 +61,7 @@ class PreprocessingMixin:
         rolling_df = pd.DataFrame({
             name: pd.Series(
                 np.split(feat_seqs[i].squeeze(0), n_windows, 0)
-            ).map(torch.tensor) for i, name in enumerate(features)
+            ).map(paddle.to_tensor) for i, name in enumerate(features)
         })
         return rolling_df
     
@@ -73,7 +73,7 @@ class PreprocessingMixin:
     @staticmethod
     def _df_to_tensor_dict(df, features):
         out = {
-            feat: torch.from_numpy(
+            feat: paddle.to_tensor(
                 rearrange(
                     df.select(feat).to_numpy().squeeze().tolist(), "b d -> b d"
                 )
@@ -82,12 +82,12 @@ class PreprocessingMixin:
             for feat in features
         }
         fut_out = {
-            feat + FUT_SUFFIX: torch.from_numpy(
+            feat + FUT_SUFFIX: paddle.to_tensor(
                 df.select(feat + FUT_SUFFIX).to_numpy()
             ) for feat in features
         }
         out.update(fut_out)
-        out["userId"] = torch.from_numpy(df.select("userId").to_numpy())
+        out["userId"] = paddle.to_tensor(df.select("userId").to_numpy())
         return out
 
 
@@ -98,7 +98,7 @@ class PreprocessingMixin:
         window_size: int = 200,
         stride: int = 1,
         train_split: float = 0.8,
-    ) -> torch.Tensor:
+    ) -> paddle.Tensor:
         
         if isinstance(ratings_df, pd.DataFrame):
             ratings_df = pl.from_pandas(ratings_df)
