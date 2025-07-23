@@ -21,8 +21,29 @@ except ImportError:
         def __init__(self):
             pass
     class InMemoryDataset:
-        def __init__(self, *args, **kwargs):
-            pass
+        def __init__(self, root=None, transform=None, pre_transform=None, force_reload=False):
+            self.root = root
+            self.transform = transform
+            self.pre_transform = pre_transform
+            self.force_reload = force_reload
+            if root:
+                self.raw_dir = osp.join(root, 'raw')
+                self.processed_dir = osp.join(root, 'processed')
+                os.makedirs(self.raw_dir, exist_ok=True)
+                os.makedirs(self.processed_dir, exist_ok=True)
+        
+        @property
+        def processed_paths(self):
+            return [osp.join(self.processed_dir, f) for f in self.processed_file_names if isinstance(f, str)] or [osp.join(self.processed_dir, self.processed_file_names)]
+        
+        def load(self, path, data_cls=None):
+            if osp.exists(path):
+                self.data = paddle.load(path)
+            else:
+                self.process()
+        
+        def save(self, data_list, path):
+            paddle.save(data_list[0], path)
 from typing import Callable
 from typing import List
 from typing import Optional
@@ -142,9 +163,8 @@ class AmazonReviews(InMemoryDataset, PreprocessingMixin):
         data['item'].x = item_emb
         data['item'].text = np.array(sentences)
 
-        gen = torch.Generator()
-        gen.manual_seed(42)
-        data['item'].is_train = torch.rand(item_emb.shape[0], generator=gen) > 0.05
+        paddle.seed(42)
+        data['item'].is_train = paddle.rand([item_emb.shape[0]]) > 0.05
 
         self.save([data], self.processed_paths[0])
         
