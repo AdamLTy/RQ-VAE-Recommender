@@ -1,4 +1,4 @@
-import torch
+import paddle
 
 from data.schemas import SeqBatch
 from einops import rearrange
@@ -10,13 +10,10 @@ from modules.loss import QuantizeLoss
 from modules.normalize import l2norm
 from modules.quantize import Quantize
 from modules.quantize import QuantizeForwardMode
-from huggingface_hub import PyTorchModelHubMixin
 from typing import List
 from typing import NamedTuple
-from torch import nn
-from torch import Tensor
-
-torch.set_float32_matmul_precision('high')
+from paddle import nn
+from paddle import Tensor
 
 
 class RqVaeOutput(NamedTuple):
@@ -34,7 +31,7 @@ class RqVaeComputedLosses(NamedTuple):
     p_unique_ids: Tensor
 
 
-class RqVae(nn.Module, PyTorchModelHubMixin):
+class RqVae(nn.Layer):
     def __init__(
         self,
         input_dim: int,
@@ -61,7 +58,7 @@ class RqVae(nn.Module, PyTorchModelHubMixin):
         self.commitment_weight = commitment_weight
         self.n_cat_feats = n_cat_features
 
-        self.layers = nn.ModuleList(modules=[
+        self.layers = nn.LayerList(sublayers=[
             Quantize(
                 embed_dim=embed_dim,
                 n_embed=codebook_size,
@@ -97,12 +94,12 @@ class RqVae(nn.Module, PyTorchModelHubMixin):
         return self._config
     
     @property
-    def device(self) -> torch.device:
-        return next(self.encoder.parameters()).device
+    def device(self):
+        return paddle.get_device()
     
     def load_pretrained(self, path: str) -> None:
-        state = torch.load(path, map_location=self.device, weights_only=False)
-        self.load_state_dict(state["model"])
+        state = paddle.load(path)
+        self.load_dict(state["model"])
         print(f"---Loaded RQVAE Iter {state['iter']}---")
 
     def encode(self, x: Tensor) -> Tensor:
@@ -137,22 +134,21 @@ class RqVae(nn.Module, PyTorchModelHubMixin):
             quantize_loss=quantize_loss
         )
 
-    @torch.compile(mode="reduce-overhead")
     def forward(self, batch: SeqBatch, gumbel_t: float) -> RqVaeComputedLosses:
         x = batch.x
         quantized = self.get_semantic_ids(x, gumbel_t)
         embs, residuals = quantized.embeddings, quantized.residuals
         x_hat = self.decode(embs.sum(axis=-1))
-        x_hat = torch.cat([l2norm(x_hat[...,:-self.n_cat_feats]), x_hat[...,-self.n_cat_feats:]], axis=-1)
+        x_hat = paddle.concat([l2norm(x_hat[...,:-self.n_cat_feats]), x_hat[...,-self.n_cat_feats:]], axis=-1)
 
         reconstuction_loss = self.reconstruction_loss(x_hat, x)
         rqvae_loss = quantized.quantize_loss
         loss = (reconstuction_loss + rqvae_loss).mean()
 
-        with torch.no_grad():
+        with paddle.no_grad():
             # Compute debug ID statistics
-            embs_norm = embs.norm(dim=1)
-            p_unique_ids = (~torch.triu(
+            embs_norm = paddle.norm(embs, p=2, axis=1)
+            p_unique_ids = (~paddle.triu(
                 (rearrange(quantized.sem_ids, "b d -> b 1 d") == rearrange(quantized.sem_ids, "b d -> 1 b d")).all(axis=-1), diagonal=1)
             ).all(axis=1).sum() / quantized.sem_ids.shape[0]
 

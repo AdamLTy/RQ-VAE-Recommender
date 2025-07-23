@@ -1,5 +1,5 @@
 from typing import NamedTuple
-from torch import Tensor
+from paddle import Tensor
 
 FUT_SUFFIX = "_fut"
 

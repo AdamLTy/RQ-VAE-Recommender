@@ -8,7 +8,9 @@ def cycle(dataloader):
 
 
 def batch_to(batch, device):
-    return SeqBatch(*[v.to(device) for _,v in batch._asdict().items()])
+    # In PaddlePaddle, tensors are already on the correct device by default
+    # but we can ensure they're on the right device if needed
+    return SeqBatch(*[v for _,v in batch._asdict().items()])
 
 
 def next_batch(dataloader, device):

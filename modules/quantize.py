@@ -1,5 +1,5 @@
 import gin
-import torch
+import paddle
 
 from distributions.gumbel import gumbel_softmax_sample
 from einops import rearrange
@@ -8,9 +8,9 @@ from init.kmeans import kmeans_init_
 from modules.loss import QuantizeLoss
 from modules.normalize import L2NormalizationLayer
 from typing import NamedTuple
-from torch import nn
-from torch import Tensor
-from torch.nn import functional as F
+from paddle import nn
+from paddle import Tensor
+from paddle.nn import functional as F
 
 
 @gin.constants_from_enum
@@ -45,7 +45,7 @@ def efficient_rotation_trick_transform(u, q, e):
     ).squeeze()
 
 
-class Quantize(nn.Module):
+class Quantize(nn.Layer):
     def __init__(
         self,
         embed_dim: int,
@@ -80,15 +80,15 @@ class Quantize(nn.Module):
         return self.embedding.weight
 
     @property
-    def device(self) -> torch.device:
-        return self.embedding.weight.device
+    def device(self):
+        return paddle.get_device()
 
     def _init_weights(self) -> None:
-        for m in self.modules():
+        for m in self.sublayers():
             if isinstance(m, nn.Embedding):
-                nn.init.uniform_(m.weight)
+                paddle.nn.initializer.Uniform()(m.weight)
     
-    @torch.no_grad
+    @paddle.no_grad()
     def _kmeans_init(self, x) -> None:
         kmeans_init_(self.embedding.weight, x=x)
         self.kmeans_initted = True
@@ -133,12 +133,12 @@ class Quantize(nn.Module):
             elif self.forward_mode == QuantizeForwardMode.ROTATION_TRICK:
                 emb = self.get_item_embeddings(ids)
                 emb_out = efficient_rotation_trick_transform(
-                    x / (x.norm(dim=-1, keepdim=True) + 1e-8),
-                    emb / (emb.norm(dim=-1, keepdim=True) + 1e-8),
+                    x / (paddle.norm(x, p=2, axis=-1, keepdim=True) + 1e-8),
+                    emb / (paddle.norm(emb, p=2, axis=-1, keepdim=True) + 1e-8),
                     x
                 )
                 emb_out = emb_out * (
-                    torch.norm(emb, dim=1, keepdim=True) / (torch.norm(x, dim=1, keepdim=True) + 1e-6)
+                    paddle.norm(emb, p=2, axis=1, keepdim=True) / (paddle.norm(x, p=2, axis=1, keepdim=True) + 1e-6)
                 ).detach()
             else:
                 raise Exception("Unsupported Quantize forward mode.")

@@ -1,0 +1,9 @@
+# PaddlePaddle version of requirements
+paddlepaddle-gpu>=2.6.0  # or paddlepaddle for CPU-only
+gin-config
+pandas
+numpy
+swanlab
+einops
+tqdm
+huggingface_hub

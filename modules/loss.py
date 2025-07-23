@@ -1,8 +1,8 @@
-from torch import nn
-from torch import Tensor
+from paddle import nn
+from paddle import Tensor
 
 
-class ReconstructionLoss(nn.Module):
+class ReconstructionLoss(nn.Layer):
     def __init__(self) -> None:
         super().__init__()
 
@@ -10,7 +10,7 @@ class ReconstructionLoss(nn.Module):
         return ((x_hat - x)**2).sum(axis=-1)
 
 
-class CategoricalReconstuctionLoss(nn.Module):
+class CategoricalReconstuctionLoss(nn.Layer):
     def __init__(self, n_cat_feats: int) -> None:
         super().__init__()
         self.reconstruction_loss = ReconstructionLoss()
@@ -31,7 +31,7 @@ class CategoricalReconstuctionLoss(nn.Module):
         return reconstr
 
 
-class QuantizeLoss(nn.Module):
+class QuantizeLoss(nn.Layer):
     def __init__(self, commitment_weight: float = 1.0) -> None:
         super().__init__()
         self.commitment_weight = commitment_weight

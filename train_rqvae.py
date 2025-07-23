@@ -1,10 +1,9 @@
 import gin
 import os
-import torch
+import paddle
 import numpy as np
 import swanlab
 
-from accelerate import Accelerator
 from data.processed import ItemData
 from data.processed import RecDataset
 from data.utils import batch_to
@@ -14,10 +13,10 @@ from modules.rqvae import RqVae
 from modules.quantize import QuantizeForwardMode
 from modules.tokenizer.semids import SemanticIdTokenizer
 from modules.utils import parse_config
-from torch.optim import AdamW
-from torch.utils.data import BatchSampler
-from torch.utils.data import DataLoader
-from torch.utils.data import RandomSampler
+from paddle.optimizer import AdamW
+from paddle.io import BatchSampler
+from paddle.io import DataLoader
+from paddle.io import RandomSampler
 from tqdm import tqdm
 
 
@@ -57,12 +56,12 @@ def train(
     if swanlab_logging:
         params = locals()
 
-    accelerator = Accelerator(
-        split_batches=split_batches,
-        mixed_precision=mixed_precision_type if amp else 'no'
-    )
-
-    device = accelerator.device
+    # Set device for PaddlePaddle
+    if paddle.device.is_compiled_with_cuda():
+        device = paddle.CUDAPlace(0)
+    else:
+        device = paddle.CPUPlace()
+    paddle.device.set_device(device)
 
     train_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=force_dataset_process, train_test_split="train" if do_eval else "all", split=dataset_split, data_path=data_path)
     train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size, False)
@@ -75,9 +74,6 @@ def train(
         eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=None, collate_fn=lambda batch: batch)
 
     index_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="all", split=dataset_split, data_path=data_path) if do_eval else train_dataset
-    
-    train_dataloader = accelerator.prepare(train_dataloader)
-    # TODO: Investigate bug with prepare eval_dataloader
 
     model = RqVae(
         input_dim=vae_input_dim,
@@ -99,7 +95,7 @@ def train(
         weight_decay=weight_decay
     )
 
-    if swanlab_logging and accelerator.is_main_process:
+    if swanlab_logging:
         run = swanlab.init(
             project="rq-vae-training",
             config=params
@@ -108,13 +104,9 @@ def train(
     start_iter = 0
     if pretrained_rqvae_path is not None:
         model.load_pretrained(pretrained_rqvae_path)
-        state = torch.load(pretrained_rqvae_path, map_location=device, weights_only=False)
-        optimizer.load_state_dict(state["optimizer"])
+        state = paddle.load(pretrained_rqvae_path)
+        optimizer.set_state_dict(state["optimizer"])
         start_iter = state["iter"]+1
-
-    model, optimizer = accelerator.prepare(
-        model, optimizer
-    )
 
     tokenizer = SemanticIdTokenizer(
         input_dim=vae_input_dim,
@@ -129,32 +121,37 @@ def train(
     )
     tokenizer.rq_vae = model
 
-    with tqdm(initial=start_iter, total=start_iter+iterations,
-              disable=not accelerator.is_main_process) as pbar:
+    with tqdm(initial=start_iter, total=start_iter+iterations) as pbar:
         losses = [[], [], []]
         for iter in range(start_iter, start_iter+1+iterations):
             model.train()
             total_loss = 0
             t = 0.2
             if iter == 0 and use_kmeans_init:
-                kmeans_init_data = batch_to(train_dataset[torch.arange(min(20000, len(train_dataset)))], device)
+                kmeans_init_data = batch_to(train_dataset[paddle.arange(min(20000, len(train_dataset)))], device)
                 model(kmeans_init_data, t)
 
-            optimizer.zero_grad()
+            optimizer.clear_grad()
             for _ in range(gradient_accumulate_every):
                 data = next_batch(train_dataloader, device)
 
-                with accelerator.autocast():
+                if amp:
+                    with paddle.amp.auto_cast():
+                        model_output = model(data, gumbel_t=t)
+                        loss = model_output.loss
+                        loss = loss / gradient_accumulate_every
+                        total_loss += loss
+                else:
                     model_output = model(data, gumbel_t=t)
                     loss = model_output.loss
                     loss = loss / gradient_accumulate_every
                     total_loss += loss
 
-            accelerator.backward(total_loss)
+            total_loss.backward()
 
-            losses[0].append(total_loss.cpu().item())
-            losses[1].append(model_output.reconstruction_loss.cpu().item())
-            losses[2].append(model_output.rqvae_loss.cpu().item())
+            losses[0].append(total_loss.item())
+            losses[1].append(model_output.reconstruction_loss.item())
+            losses[2].append(model_output.rqvae_loss.item())
             losses[0] = losses[0][-1000:]
             losses[1] = losses[1][-1000:]
             losses[2] = losses[2][-1000:]
@@ -165,26 +162,22 @@ def train(
 
             pbar.set_description(f'loss: {print_loss:.4f}, rl: {print_rec_loss:.4f}, vl: {print_vae_loss:.4f}')
 
-            accelerator.wait_for_everyone()
-
             optimizer.step()
-            
-            accelerator.wait_for_everyone()
 
             id_diversity_log = {}
-            if accelerator.is_main_process and swanlab_logging:
+            if swanlab_logging:
                 # Compute logs depending on training model_output here to avoid cuda graph overwrite from eval graph.
                 emb_norms_avg = model_output.embs_norm.mean(axis=0)
                 emb_norms_avg_log = {
-                    f"emb_avg_norm_{i}": emb_norms_avg[i].cpu().item() for i in range(vae_n_layers)
+                    f"emb_avg_norm_{i}": emb_norms_avg[i].item() for i in range(vae_n_layers)
                 }
                 train_log = {
-                    "learning_rate": optimizer.param_groups[0]["lr"],
-                    "total_loss": total_loss.cpu().item(),
-                    "reconstruction_loss": model_output.reconstruction_loss.cpu().item(),
-                    "rqvae_loss": model_output.rqvae_loss.cpu().item(),
+                    "learning_rate": optimizer.get_lr(),
+                    "total_loss": total_loss.item(),
+                    "reconstruction_loss": model_output.reconstruction_loss.item(),
+                    "rqvae_loss": model_output.rqvae_loss.item(),
                     "temperature": t,
-                    "p_unique_ids": model_output.p_unique_ids.cpu().item(),
+                    "p_unique_ids": model_output.p_unique_ids.item(),
                     **emb_norms_avg_log,
                 }
 
@@ -194,55 +187,54 @@ def train(
                     eval_losses = [[], [], []]
                     for batch in pbar_eval:
                         data = batch_to(batch, device)
-                        with torch.no_grad():
+                        with paddle.no_grad():
                             eval_model_output = model(data, gumbel_t=t)
 
-                        eval_losses[0].append(eval_model_output.loss.cpu().item())
-                        eval_losses[1].append(eval_model_output.reconstruction_loss.cpu().item())
-                        eval_losses[2].append(eval_model_output.rqvae_loss.cpu().item())
+                        eval_losses[0].append(eval_model_output.loss.item())
+                        eval_losses[1].append(eval_model_output.reconstruction_loss.item())
+                        eval_losses[2].append(eval_model_output.rqvae_loss.item())
                     
                     eval_losses = np.array(eval_losses).mean(axis=-1)
                     id_diversity_log["eval_total_loss"] = eval_losses[0]
                     id_diversity_log["eval_reconstruction_loss"] = eval_losses[1]
                     id_diversity_log["eval_rqvae_loss"] = eval_losses[2]
                     
-            if accelerator.is_main_process:
-                if (iter+1) % save_model_every == 0 or iter+1 == iterations:
-                    state = {
-                        "iter": iter,
-                        "model": model.state_dict(),
-                        "model_config": model.config,
-                        "optimizer": optimizer.state_dict()
-                    }
+            if (iter+1) % save_model_every == 0 or iter+1 == iterations:
+                state = {
+                    "iter": iter,
+                    "model": model.state_dict(),
+                    "model_config": model.config,
+                    "optimizer": optimizer.state_dict()
+                }
 
-                    if not os.path.exists(save_dir_root):
-                        os.makedirs(save_dir_root)
+                if not os.path.exists(save_dir_root):
+                    os.makedirs(save_dir_root)
 
-                    torch.save(state, save_dir_root + f"checkpoint_{iter}.pt")
+                paddle.save(state, save_dir_root + f"checkpoint_{iter}.pdparams")
                 
-                if (iter+1) % eval_every == 0 or iter+1 == iterations:
-                    tokenizer.reset()
-                    model.eval()
+            if (iter+1) % eval_every == 0 or iter+1 == iterations:
+                tokenizer.reset()
+                model.eval()
 
-                    corpus_ids = tokenizer.precompute_corpus_ids(index_dataset)
-                    max_duplicates = corpus_ids[:,-1].max() / corpus_ids.shape[0]
-                    
-                    _, counts = torch.unique(corpus_ids[:,:-1], dim=0, return_counts=True)
-                    p = counts / corpus_ids.shape[0]
-                    rqvae_entropy = -(p*torch.log(p)).sum()
-
-                    for cid in range(vae_n_layers):
-                        _, counts = torch.unique(corpus_ids[:,cid], return_counts=True)
-                        id_diversity_log[f"codebook_usage_{cid}"] = len(counts) / vae_codebook_size
-
-                    id_diversity_log["rqvae_entropy"] = rqvae_entropy.cpu().item()
-                    id_diversity_log["max_id_duplicates"] = max_duplicates.cpu().item()
+                corpus_ids = tokenizer.precompute_corpus_ids(index_dataset)
+                max_duplicates = corpus_ids[:,-1].max() / corpus_ids.shape[0]
                 
-                if swanlab_logging:
-                    swanlab.log({
-                        **train_log,
-                        **id_diversity_log
-                    })
+                _, counts = paddle.unique(corpus_ids[:,:-1], axis=0, return_counts=True)
+                p = counts / corpus_ids.shape[0]
+                rqvae_entropy = -(p*paddle.log(p)).sum()
+
+                for cid in range(vae_n_layers):
+                    _, counts = paddle.unique(corpus_ids[:,cid], return_counts=True)
+                    id_diversity_log[f"codebook_usage_{cid}"] = len(counts) / vae_codebook_size
+
+                id_diversity_log["rqvae_entropy"] = rqvae_entropy.item()
+                id_diversity_log["max_id_duplicates"] = max_duplicates.item()
+            
+            if swanlab_logging:
+                swanlab.log({
+                    **train_log,
+                    **id_diversity_log
+                })
 
             pbar.update(1)
     

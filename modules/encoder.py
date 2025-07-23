@@ -1,10 +1,10 @@
 from modules.normalize import L2NormalizationLayer
 from typing import List
-from torch import nn
-from torch import Tensor
+from paddle import nn
+from paddle import Tensor
 
 
-class MLP(nn.Module):
+class MLP(nn.Layer):
     def __init__(
         self,
         input_dim: int,
@@ -26,7 +26,7 @@ class MLP(nn.Module):
         for i, (in_d, out_d) in enumerate(zip(dims[:-1], dims[1:])):
             self.mlp.append(nn.Linear(in_d, out_d, bias=False))
             if i != len(dims)-2:
-                self.mlp.append(nn.SiLU())
+                self.mlp.append(nn.Silu())
                 if dropout != 0:
                     self.mlp.append(nn.Dropout(dropout))
         self.mlp.append(L2NormalizationLayer() if normalize else nn.Identity())

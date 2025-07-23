@@ -1,20 +1,20 @@
-import torch
-import torch.nn.functional as F
+import paddle
+import paddle.nn.functional as F
 import numpy as np
-from torch import Tensor
+from paddle import Tensor
 from typing import Tuple
 
 
-def sample_gumbel(shape: Tuple, device: torch.device, eps=1e-20) -> Tensor:
+def sample_gumbel(shape: Tuple, device=None, eps=1e-20) -> Tensor:
     """Sample from Gumbel(0, 1)"""
-    U = torch.rand(shape, device=device)
-    return -torch.log(-torch.log(U + eps) + eps)
+    U = paddle.rand(shape)
+    return -paddle.log(-paddle.log(U + eps) + eps)
 
 
-def gumbel_softmax_sample(logits: Tensor, temperature: float, device: torch.device) -> Tensor:
+def gumbel_softmax_sample(logits: Tensor, temperature: float, device=None) -> Tensor:
     """ Draw a sample from the Gumbel-Softmax distribution"""
     y = logits + sample_gumbel(logits.shape, device)
-    sample = F.softmax(y / temperature, dim=-1)
+    sample = F.softmax(y / temperature, axis=-1)
     return sample
 
 
