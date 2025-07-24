@@ -3,13 +3,13 @@ import triton
 import triton.language as tl
 
 from paddle import Tensor
-from paddle.autograd import Function
+from paddle.autograd import PyLayer
 # TODO: Handle nested tensor equivalent in Paddle
 # from paddle.nested import Tensor as NestedTensor
 NestedTensor = Tensor  # Temporary fallback
 
 
-class PaddedToJaggedTensor(Function):
+class PaddedToJaggedTensor(PyLayer):
     @staticmethod
     def forward(ctx, x: Tensor, lengths: Tensor, max_len: int) -> NestedTensor:
         assert x.dim() == 3
