@@ -81,7 +81,7 @@ def train(
         batch_size=batch_size,
         shuffle=True,
         collate_fn=collate_fn,
-        num_workers=8,
+        num_workers=4,
         use_shared_memory=False,
         prefetch_factor=2
     )
@@ -99,7 +99,7 @@ def train(
             batch_size=batch_size,
             shuffle=False,
             collate_fn=collate_fn,
-            num_workers=4,
+            num_workers=2,
             use_shared_memory=False,
             prefetch_factor=2
         )
