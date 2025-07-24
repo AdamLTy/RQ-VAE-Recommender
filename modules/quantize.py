@@ -40,8 +40,8 @@ def efficient_rotation_trick_transform(u, q, e):
 
     return (
         e -
-        2 * (e @ rearrange(w, 'b d -> b d 1') @ rearrange(w, 'b d -> b 1 d')) +
-        2 * (e @ rearrange(u, 'b d -> b d 1').detach() @ rearrange(q, 'b d -> b 1 d').detach())
+        2 * paddle.matmul(paddle.matmul(e, rearrange(w, 'b d -> b d 1')), rearrange(w, 'b d -> b 1 d')) +
+        2 * paddle.matmul(paddle.matmul(e, rearrange(u, 'b d -> b d 1').detach()), rearrange(q, 'b d -> b 1 d').detach())
     ).squeeze()
 
 
@@ -106,14 +106,16 @@ class Quantize(nn.Layer):
         
         if self.distance_mode == QuantizeDistance.L2:
             dist = (
-                (x**2).sum(axis=1, keepdim=True) +
-                (codebook.T**2).sum(axis=0, keepdim=True) -
-                2 * x @ codebook.T
+                paddle.sum(x**2, axis=1, keepdim=True) +
+                paddle.sum(codebook.T**2, axis=0, keepdim=True) -
+                2 * paddle.matmul(x, codebook.T)
             )
         elif self.distance_mode == QuantizeDistance.COSINE:
             dist = -(
-                x / x.norm(axis=1, keepdim=True) @
-                (codebook.T) / codebook.T.norm(axis=0, keepdim=True)
+                paddle.matmul(
+                    x / paddle.norm(x, axis=1, keepdim=True),
+                    (codebook.T) / paddle.norm(codebook.T, axis=0, keepdim=True)
+                )
             )
         else:
             raise Exception("Unsupported Quantize distance mode.")
@@ -125,7 +127,7 @@ class Quantize(nn.Layer):
                 weights = gumbel_softmax_sample(
                     -dist, temperature=temperature, device=self.device
                 )
-                emb = weights @ codebook
+                emb = paddle.matmul(weights, codebook)
                 emb_out = emb
             elif self.forward_mode == QuantizeForwardMode.STE:
                 emb = self.get_item_embeddings(ids)

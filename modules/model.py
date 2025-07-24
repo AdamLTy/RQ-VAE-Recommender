@@ -18,13 +18,9 @@ from modules.utils import select_columns_per_row
 from ops.triton.jagged import jagged_to_flattened_tensor
 from ops.triton.jagged import padded_to_jagged_tensor
 from typing import NamedTuple
-from torch import nn
-from torch import Tensor
-from torch.nn import functional as F
-
-# Needed to make torch.compile succeed
-torch._dynamo.config.suppress_errors = True
-torch.set_float32_matmul_precision('high')
+from paddle import nn
+from paddle import Tensor
+from paddle.nn import functional as F
 
 
 class ModelOutput(NamedTuple):
@@ -61,7 +57,7 @@ class EncoderDecoderRetrievalModel(nn.Module):
         self.inference_verifier_fn = inference_verifier_fn
         self.enable_generation = False
 
-        self.bos_emb = nn.Parameter(torch.rand(embedding_dim))
+        self.bos_emb = paddle.create_parameter(shape=[embedding_dim], dtype='float32', default_initializer=paddle.nn.initializer.Uniform())
         self.norm = RMSNorm(embedding_dim)
         self.norm_cxt = RMSNorm(embedding_dim)
         self.do = nn.Dropout(p=0.5)
@@ -109,14 +105,14 @@ class EncoderDecoderRetrievalModel(nn.Module):
         pos_max = N // self.sem_id_dim
         # pos = torch.arange(pos_max, device=batch.sem_ids.device).repeat_interleave(self.sem_id_dim)
           
-        pos = torch.arange(N, device=sem_ids_emb.device).unsqueeze(0)
+        pos = paddle.arange(N).unsqueeze(0)
         wpe = self.wpe(pos)
 
-        input_embedding = torch.cat([user_emb, wpe + sem_ids_emb], axis=1)
+        input_embedding = paddle.concat([user_emb, wpe + sem_ids_emb], axis=1)
         input_embedding_fut = self.bos_emb.repeat(B, 1, 1)
         if sem_ids_emb_fut is not None:
             tte_fut = self.tte(batch.token_type_ids_fut)
-            input_embedding_fut = torch.cat([
+            input_embedding_fut = paddle.concat([
                 input_embedding_fut, 
                 sem_ids_emb_fut + tte_fut
                 ], axis=1
@@ -125,14 +121,14 @@ class EncoderDecoderRetrievalModel(nn.Module):
         if self.jagged_mode:
             input_embedding = padded_to_jagged_tensor(input_embedding, lengths=seq_lengths+1, max_len=input_embedding.shape[1])
 
-            seq_lengths_fut = torch.tensor(input_embedding_fut.shape[1], device=input_embedding_fut.device, dtype=torch.int64).repeat(B)
+            seq_lengths_fut = paddle.to_tensor(input_embedding_fut.shape[1], dtype='int64').tile([B])
             input_embedding_fut = padded_to_jagged_tensor(input_embedding_fut, lengths=seq_lengths_fut, max_len=input_embedding_fut.shape[1])
         else:
-            mem_mask = torch.cat([
-                torch.ones(B, 1, dtype=torch.bool, device=batch.seq_mask.device),
+            mem_mask = paddle.concat([
+                paddle.ones([B, 1], dtype='bool'),
                 batch.seq_mask
             ], axis=1)
-            f_mask = torch.zeros_like(mem_mask, dtype=torch.float32)
+            f_mask = paddle.zeros_like(mem_mask, dtype='float32')
             f_mask[~mem_mask] = float("-inf")
         
         transformer_context = self.in_proj_context(self.do(self.norm(input_embedding)))
@@ -148,7 +144,7 @@ class EncoderDecoderRetrievalModel(nn.Module):
 
     @eval_mode
     @reset_encoder_cache
-    @torch.no_grad
+    @paddle.no_grad()
     def generate_next_sem_id(
         self,
         batch: TokenizedSeqBatch,
@@ -175,15 +171,15 @@ class EncoderDecoderRetrievalModel(nn.Module):
         for i in range(self.sem_id_dim):
             logits = self.forward(input_batch).logits
             probas_batched = F.softmax(logits / temperature, dim=-1)
-            samples_batched = torch.multinomial(probas_batched, num_samples=n_top_k_candidates)
+            samples_batched = paddle.multinomial(probas_batched, num_samples=n_top_k_candidates)
 
             if generated is None:
                 is_valid_prefix = self.inference_verifier_fn(samples_batched.unsqueeze(-1))
             else:
-                prefix = torch.cat([generated.flatten(0,1).unsqueeze(1).repeat_interleave(n_top_k_candidates, axis=1), samples_batched.unsqueeze(-1)], axis=-1)
+                prefix = paddle.concat([generated.flatten([0,1]).unsqueeze(1).tile([1, n_top_k_candidates, 1]), samples_batched.unsqueeze(-1)], axis=-1)
                 is_valid_prefix = self.inference_verifier_fn(prefix).reshape(B, -1)
             
-            sampled_log_probas = torch.log(torch.gather(probas_batched, 1, samples_batched)).reshape(B, -1)
+            sampled_log_probas = paddle.log(paddle.gather(probas_batched, samples_batched, axis=1)).reshape([B, -1])
             samples = samples_batched.reshape(B, -1)
 
             # Get top-K:
@@ -194,11 +190,11 @@ class EncoderDecoderRetrievalModel(nn.Module):
             ).sort(-1, descending=True)
 
             top_k_log_probas, top_k_indices = sorted_log_probas[:, :k], sorted_indices[:, :k]
-            top_k_samples = torch.gather(samples, 1, top_k_indices)
+            top_k_samples = paddle.gather(samples, top_k_indices, axis=1)
             
             if generated is not None:
-                parent_id = torch.gather(generated, 1, (top_k_indices // n_top_k_candidates).unsqueeze(2).expand(-1,-1,i))
-                top_k_samples = torch.cat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
+                parent_id = paddle.gather(generated, (top_k_indices // n_top_k_candidates).unsqueeze(2).expand([-1,-1,i]), axis=1)
+                top_k_samples = paddle.concat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
 
                 next_sem_ids = top_k_samples.flatten(end_dim=1)
 
@@ -206,13 +202,13 @@ class EncoderDecoderRetrievalModel(nn.Module):
                     user_ids=input_batch.user_ids,
                     sem_ids=input_batch.sem_ids,
                     sem_ids_fut=next_sem_ids,
-                    token_type_ids_fut=torch.arange(next_sem_ids.shape[1], device=next_sem_ids.device).repeat(next_sem_ids.shape[0], 1),
+                    token_type_ids_fut=paddle.arange(next_sem_ids.shape[1]).tile([next_sem_ids.shape[0], 1]),
                     seq_mask=input_batch.seq_mask,
                     token_type_ids=input_batch.token_type_ids
                 )
 
-                generated = torch.clone(top_k_samples.detach())
-                log_probas = torch.clone(top_k_log_probas.detach())
+                generated = top_k_samples.detach().clone()
+                log_probas = top_k_log_probas.detach().clone()
             else:
                 next_sem_ids = top_k_samples.reshape(-1, 1)
 
@@ -220,8 +216,8 @@ class EncoderDecoderRetrievalModel(nn.Module):
                 # TODO: Figure out how to avoid jagged - padded conversions 
                 # (E.g. Implement repeat_interleave jagged kernel)
                 if self.jagged_mode:
-                    cache = torch.zeros(input_batch.sem_ids.shape[0], input_batch.sem_ids.shape[1]+1, self.attn_dim, device=input_batch.sem_ids.device)
-                    cache_mask = torch.cat([torch.ones(input_batch.sem_ids.shape[0], 1, dtype=bool, device=input_batch.seq_mask.device), input_batch.seq_mask], axis=1)
+                    cache = paddle.zeros([input_batch.sem_ids.shape[0], input_batch.sem_ids.shape[1]+1, self.attn_dim])
+                    cache_mask = paddle.concat([paddle.ones([input_batch.sem_ids.shape[0], 1], dtype='bool'), input_batch.seq_mask], axis=1)
                     cache[cache_mask] = self.transformer.cached_enc_output.values()
                     lengths = self.transformer.cached_enc_output.offsets().diff().repeat_interleave(k)
                     cache = cache.repeat_interleave(k, dim=0)
@@ -231,20 +227,20 @@ class EncoderDecoderRetrievalModel(nn.Module):
                     user_ids=input_batch.user_ids.repeat_interleave(k, dim=0),
                     sem_ids=input_batch.sem_ids.repeat_interleave(k, dim=0),
                     sem_ids_fut=next_sem_ids,
-                    token_type_ids_fut=torch.zeros_like(next_sem_ids),
+                    token_type_ids_fut=paddle.zeros_like(next_sem_ids),
                     seq_mask=input_batch.seq_mask.repeat_interleave(k, dim=0),
                     token_type_ids=input_batch.token_type_ids.repeat_interleave(k, dim=0)
                 )
 
                 generated = top_k_samples.unsqueeze(-1)
-                log_probas = torch.clone(top_k_log_probas.detach())
+                log_probas = top_k_log_probas.detach().clone()
         
         return GenerationOutput(
             sem_ids=generated.squeeze(),
             log_probas=log_probas.squeeze()
         )
             
-    @torch.compile
+    # @torch.compile  # PaddlePaddle doesn't have torch.compile equivalent
     def forward(self, batch: TokenizedSeqBatch) -> ModelOutput:
         seq_mask = batch.seq_mask
         B, N = seq_mask.shape
