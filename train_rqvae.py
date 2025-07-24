@@ -82,7 +82,8 @@ def train(
         shuffle=True,
         collate_fn=collate_fn,
         num_workers=8,
-        use_shared_memory=True
+        use_shared_memory=False,
+        prefetch_factor=2
     )
     train_dataloader = cycle(train_dataloader)
     
@@ -99,7 +100,8 @@ def train(
             shuffle=False,
             collate_fn=collate_fn,
             num_workers=4,
-            use_shared_memory=True
+            use_shared_memory=False,
+            prefetch_factor=2
         )
     
     # For H5 dataset, we need to get embedding dimension from the data
