@@ -2,7 +2,7 @@ import data.h5_dataset
 import modules.quantize
 
 train.iterations=800000
-train.learning_rate=0.0005
+train.learning_rate=0.001
 train.weight_decay=0.01
 train.batch_size=128
 train.vae_input_dim=1024
