@@ -118,7 +118,7 @@ class Quantize(nn.Layer):
         else:
             raise Exception("Unsupported Quantize distance mode.")
 
-        _, ids = (dist.detach()).min(axis=1)
+        ids = (dist.detach()).argmin(axis=1)
 
         if self.training:
             if self.forward_mode == QuantizeForwardMode.GUMBEL_SOFTMAX:
