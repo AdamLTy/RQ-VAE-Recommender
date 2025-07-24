@@ -8,7 +8,14 @@ def cycle(dataloader):
 
 
 def batch_to(batch, device):
-    return SeqBatch(*[v for _,v in batch._asdict().items()])
+    if isinstance(batch, SeqBatch):
+        return batch
+    elif isinstance(batch, (list, tuple)) and len(batch) == 6:
+        # Handle case where DataLoader returns a list/tuple of tensors
+        return SeqBatch(*batch)
+    else:
+        # Fallback: assume it's already a proper batch
+        return batch
 
 
 def next_batch(dataloader, device):
