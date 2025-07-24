@@ -50,7 +50,7 @@ class H5PretrainedDataset:
         
     def _load_item_data(self):
         """Load item embeddings and create item mapping."""
-            with h5py.File(self.item_data_path, 'r') as f:
+        with h5py.File(self.item_data_path, 'r') as f:
             self.item_ids = f['item_ids'][:]
             self.item_embeddings = f['embeddings'][:]
             
