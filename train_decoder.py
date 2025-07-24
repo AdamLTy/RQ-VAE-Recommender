@@ -48,7 +48,7 @@ def train(
     vae_input_dim=18,
     vae_embed_dim=16,
     vae_hidden_dims=[18, 18],
-    vae_codebook_size=32,
+    vae_codebook_size=256,
     vae_codebook_normalize=False,
     vae_sim_vq=False,
     vae_n_cat_feats=18,
