@@ -90,9 +90,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             batch_first=True
         )
 
-        self.in_proj = nn.Linear(embedding_dim, attn_dim, bias=False)
-        self.in_proj_context = nn.Linear(embedding_dim, attn_dim, bias=False)
-        self.out_proj = nn.Linear(attn_dim, num_embeddings, bias=False)
+        self.in_proj = nn.Linear(embedding_dim, attn_dim, bias_attr=False)
+        self.in_proj_context = nn.Linear(embedding_dim, attn_dim, bias_attr=False)
+        self.out_proj = nn.Linear(attn_dim, num_embeddings, bias_attr=False)
     
     def _predict(self, batch: TokenizedSeqBatch) -> AttentionInput:
         user_emb = self.user_id_embedder(batch.user_ids)
