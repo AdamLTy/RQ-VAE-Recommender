@@ -12,8 +12,8 @@ train.vae_embed_dim=64
 train.vae_codebook_size=256
 train.vae_codebook_normalize=False
 train.vae_sim_vq=False
-train.save_model_every=5000
-train.eval_every=5000
+train.save_model_every=10
+train.eval_every=10
 # H5 dataset path configuration
 train.h5_item_data_path="/datadisk/data/item_data.h5"
 train.save_dir_root="out/rqvae/h5/"
