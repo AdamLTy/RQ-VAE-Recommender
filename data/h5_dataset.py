@@ -269,23 +269,10 @@ class H5SequenceDataset:
             user_ids_raw = f['user_ids'][:]
             self.sequence_lengths = f['sequence_lengths'][:]
             
-            # 处理string类型的user_id，创建映射
-            if user_ids_raw.dtype.kind in ['U', 'S']:  # Unicode或字节字符串
-                # 解码字节字符串为普通字符串（如果需要）
-                if user_ids_raw.dtype.kind == 'S':
-                    user_ids_str = [uid.decode('utf-8') if isinstance(uid, bytes) else str(uid) for uid in user_ids_raw]
-                else:
-                    user_ids_str = [str(uid) for uid in user_ids_raw]
-                
-                # 创建user_id到整数索引的映射
-                unique_user_ids = list(set(user_ids_str))
-                self.user_id_to_idx = {uid: idx for idx, uid in enumerate(unique_user_ids)}
-                self.user_ids = np.array([self.user_id_to_idx[uid] for uid in user_ids_str], dtype=np.int64)
-                self.original_user_ids = user_ids_str  # 保存原始string类型的user_id
-            else:
-                self.user_ids = user_ids_raw.astype(np.int64)
-                self.user_id_to_idx = None
-                self.original_user_ids = None
+            # 直接使用索引作为用户ID
+            self.user_ids = np.arange(len(user_ids_raw), dtype=np.int64)
+            self.user_id_to_idx = None
+            self.original_user_ids = user_ids_raw  # 保存原始user_id用于参考
             
             # 加载变长序列 (存储为vlen数据类型)
             sequences_data = f['sequences'][:]  # 使用正确的字段名
