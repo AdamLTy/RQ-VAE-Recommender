@@ -91,8 +91,9 @@ class H5PretrainedDataset:
         if isinstance(idx, paddle.Tensor):
             if idx.ndim == 0:  # Single tensor index
                 idx = idx.item()
-            else:  # Multiple indices
-                return [self[i.item()] for i in idx]
+            else:  # Multiple indices - return concatenated batch
+                samples = [self[i.item()] for i in idx]
+                return self._batch_samples(samples)
         
         # Get active item indices
         active_item_indices = paddle.where(self.active_item_mask)[0]
@@ -114,6 +115,24 @@ class H5PretrainedDataset:
         
         # Single item mask
         seq_mask = paddle.to_tensor([True], dtype=paddle.bool)
+        
+        return SeqBatch(
+            user_ids=user_ids,
+            ids=ids,
+            ids_fut=ids_fut,
+            x=x,
+            x_fut=x_fut,
+            seq_mask=seq_mask
+        )
+    
+    def _batch_samples(self, samples):
+        """Batch multiple SeqBatch samples into a single batch."""
+        user_ids = paddle.concat([sample.user_ids for sample in samples], axis=0)
+        ids = paddle.concat([sample.ids for sample in samples], axis=0)
+        ids_fut = paddle.concat([sample.ids_fut for sample in samples], axis=0)
+        x = paddle.concat([sample.x for sample in samples], axis=0)
+        x_fut = paddle.concat([sample.x_fut for sample in samples], axis=0)
+        seq_mask = paddle.concat([sample.seq_mask for sample in samples], axis=0)
         
         return SeqBatch(
             user_ids=user_ids,
