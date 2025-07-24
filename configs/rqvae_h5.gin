@@ -14,18 +14,14 @@ train.vae_codebook_normalize=False
 train.vae_sim_vq=False
 train.save_model_every=5000
 train.eval_every=5000
-train.dataset_folder="data"
-# Alternative: Use custom data path (overrides dataset_folder if set)
-train.data_path="/datadisk/data"
+# H5 dataset path configuration
+train.h5_item_data_path="data/preprocessed/item_data.h5"
 train.save_dir_root="out/rqvae/h5/"
 train.swanlab_logging=True
 train.commitment_weight=0.25
 train.vae_n_layers=3
 train.vae_codebook_mode=%modules.quantize.QuantizeForwardMode.ROTATION_TRICK
-train.force_dataset_process=False
 train.do_eval=True
 
 # H5-specific configuration
-train.use_h5_dataset=True
-train.item_data_path="data/item_data.h5"
-train.test_ratio=0.05
+train.h5_test_ratio=0.05
