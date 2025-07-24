@@ -36,7 +36,7 @@ def efficient_rotation_trick_transform(u, q, e):
     4.2 in https://arxiv.org/abs/2410.06424
     """
     e = rearrange(e, 'b d -> b 1 d')
-    w = F.normalize(u + q, p=2, axis=1, eps=1e-6).detach()
+    w = F.normalize(u + q, p=2, axis=1, epsilon=1e-6).detach()
 
     return (
         e -
