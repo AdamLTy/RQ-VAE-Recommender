@@ -14,9 +14,7 @@ from typing import List
 from typing import Optional
 from paddle import nn
 from paddle import Tensor
-from paddle.io import BatchSampler
 from paddle.io import DataLoader
-from paddle.io import SequenceSampler
 
 BATCH_SIZE = 16
 
@@ -76,10 +74,7 @@ class SemanticIdTokenizer(nn.Layer):
     def precompute_corpus_ids(self, movie_dataset: ItemData) -> Tensor:
         cached_ids = None
         dedup_dim = []
-        sampler = BatchSampler(
-            SequenceSampler(range(len(movie_dataset))), batch_size=512, drop_last=False
-        )
-        dataloader = DataLoader(movie_dataset, sampler=sampler, shuffle=False, collate_fn=lambda batch: batch[0])
+        dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False, collate_fn=lambda batch: batch[0])
         for batch in dataloader:
             batch_ids = self.forward(batch_to(batch, self.rq_vae.device)).sem_ids
             # Detect in-batch duplicates
