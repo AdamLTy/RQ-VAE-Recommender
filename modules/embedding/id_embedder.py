@@ -11,7 +11,7 @@ class SemIdEmbeddingBatch(NamedTuple):
     fut: Tensor
 
 
-class SemIdEmbedder(nn.Module):
+class SemIdEmbedder(nn.Layer):
     def __init__(self, num_embeddings, sem_ids_dim, embeddings_dim) -> None:
         super().__init__()
         
@@ -40,7 +40,7 @@ class SemIdEmbedder(nn.Module):
         ) 
     
 
-class UserIdEmbedder(nn.Module):
+class UserIdEmbedder(nn.Layer):
     # TODO: Implement hashing trick embedding for user id
     def __init__(self, num_buckets, embedding_dim) -> None:
         super().__init__()
@@ -49,5 +49,4 @@ class UserIdEmbedder(nn.Module):
     
     def forward(self, x: Tensor) -> Tensor:
         hashed_indices = x % self.num_buckets
-        # hashed_indices = torch.tensor([hash(token) % self.num_buckets for token in x], device=x.device)
         return self.emb(hashed_indices)

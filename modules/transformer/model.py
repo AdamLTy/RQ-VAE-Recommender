@@ -18,7 +18,7 @@ class KVCacheOpsMixin:
             layer.apply_to_kv_cache(fn)
 
 
-class TransformerBlock(nn.Module):
+class TransformerBlock(nn.Layer):
     def __init__(
         self,
         d_in: int,
@@ -92,7 +92,7 @@ class TransformerBlock(nn.Module):
             self.cross_attention.kv_cache.apply(fn)
 
 
-class TransformerDecoder(nn.Module, KVCacheOpsMixin):
+class TransformerDecoder(nn.Layer, KVCacheOpsMixin):
     def __init__(
         self,
         d_in: int,
@@ -107,7 +107,7 @@ class TransformerDecoder(nn.Module, KVCacheOpsMixin):
 
         self.do_cross_attn = do_cross_attn
 
-        self.layers = nn.ModuleList([
+        self.layers = nn.LayerList([
             TransformerBlock(
                 d_in=d_in,
                 d_out=d_out,
@@ -136,7 +136,7 @@ class TransformerDecoder(nn.Module, KVCacheOpsMixin):
         return self.layers[0].attention.kv_cache.seq_lengths
 
 
-class TransformerEncoderDecoder(nn.Module, KVCacheOpsMixin):
+class TransformerEncoderDecoder(nn.Layer, KVCacheOpsMixin):
     def __init__(
         self,
         d_in: int,

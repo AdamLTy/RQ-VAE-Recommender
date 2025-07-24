@@ -34,7 +34,7 @@ class GenerationOutput(NamedTuple):
     log_probas: Tensor
 
 
-class EncoderDecoderRetrievalModel(nn.Module):
+class EncoderDecoderRetrievalModel(nn.Layer):
     def __init__(
         self,
         embedding_dim,
@@ -103,7 +103,6 @@ class EncoderDecoderRetrievalModel(nn.Module):
         B, N, D = sem_ids_emb.shape
 
         pos_max = N // self.sem_id_dim
-        # pos = torch.arange(pos_max, device=batch.sem_ids.device).repeat_interleave(self.sem_id_dim)
           
         pos = paddle.arange(N).unsqueeze(0)
         wpe = self.wpe(pos)
@@ -240,7 +239,6 @@ class EncoderDecoderRetrievalModel(nn.Module):
             log_probas=log_probas.squeeze()
         )
             
-    # @torch.compile  # PaddlePaddle doesn't have torch.compile equivalent
     def forward(self, batch: TokenizedSeqBatch) -> ModelOutput:
         seq_mask = batch.seq_mask
         B, N = seq_mask.shape

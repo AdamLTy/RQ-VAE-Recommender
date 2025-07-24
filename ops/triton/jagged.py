@@ -17,9 +17,9 @@ class PaddedToJaggedTensor(Function):
         assert x.is_contiguous()
 
         B, N, D = x.shape
-        mask = torch.arange(max_len, device=x.device).unsqueeze(0).repeat(x.shape[0], 1) < lengths.unsqueeze(1)
+        mask = paddle.arange(max_len).unsqueeze(0).tile([x.shape[0], 1]) < lengths.unsqueeze(1)
         ctx.save_for_backward(mask)
-        lengths = lengths.to(torch.int32)
+        lengths = lengths.astype(paddle.int32)
 
         # Previous version (breaks compile graph): 
         # return torch.nested.nested_tensor(
@@ -29,42 +29,29 @@ class PaddedToJaggedTensor(Function):
         #    requires_grad=x.requires_grad
         #)
 
-        offsets = torch.cat([
-            torch.zeros(1, dtype=lengths.dtype, device=lengths.device),
-            lengths.cumsum(dim=0)
+        offsets = paddle.concat([
+            paddle.zeros([1], dtype=lengths.dtype),
+            lengths.cumsum(axis=0)
         ])
 
-        jagged_batch_size = lengths.sum().to(torch.int32)
+        jagged_batch_size = lengths.sum().astype(paddle.int32)
 
-        # Initialize empty tensor with right shapes
-        target = torch.nested.nested_tensor(
-            [[]],
-            layout=torch.jagged,
-            device=x.device,
-            requires_grad=x.requires_grad
-        )
-        target._size = (B, target.shape[1], D)
-        target._strides = (D*target._strides[0], D, 1)
-        target._values = torch.empty(jagged_batch_size, D, dtype=x.dtype, device=x.device, requires_grad=x.requires_grad)
-        target._offsets = torch.empty(len(lengths)+1, dtype=x.dtype, device=x.device, requires_grad=x.requires_grad)
-        target._metadata_cache = {}
-
+        # Initialize empty tensor with right shapes (PaddlePaddle doesn't have nested tensors)
+        # Create a simple tensor structure to mimic nested tensor behavior
+        target = paddle.empty([jagged_batch_size, D], dtype=x.dtype)
+        target_offsets = paddle.empty([len(lengths)+1], dtype=lengths.dtype)
         grid = lambda meta: (B*triton.cdiv(N, meta['BLOCK_SIZE_N']), triton.cdiv(D, meta['BLOCK_SIZE_D']),)
 
         _padded_to_jagged_kernel[grid](
             x, lengths, offsets,
-            target._values, target._offsets,
-            x.stride(0), x.stride(1), x.stride(2), target._values.stride(0),
+            target, target_offsets,
+            x.strides[0], x.strides[1], x.strides[2], target.strides[0],
             B, N, D, BLOCK_SIZE_N=32, BLOCK_SIZE_D=D
         )
 
-        # Hack: Fixes autograd failure:
-        target._get_max_seqlen()
-        target._get_min_seqlen()
-
-        # Hack: Fixes strides after _size change.
-        # Doing it here with noop to avoid shape mismatch later
-        target = target + 1 - 1
+        # Return a simple tensor instead of nested tensor for PaddlePaddle
+        # Store offsets as attribute for compatibility
+        target._offsets = target_offsets
         return target
     
 
@@ -73,7 +60,7 @@ class PaddedToJaggedTensor(Function):
         (mask,) = ctx.saved_tensors
         grad_values = grad_output.values()
 
-        grad_x = torch.zeros(*mask.shape, grad_values.shape[-1], dtype=grad_values.dtype, device=grad_values.device)
+        grad_x = paddle.zeros([*mask.shape, grad_values.shape[-1]], dtype=grad_values.dtype)
         grad_x[mask] = grad_values
 
         return grad_x, None, None

@@ -67,7 +67,8 @@ def train(
     if swanlab_logging:
         params = locals()
 
-    device = paddle.device("gpu" if paddle.device.is_compiled_with_cuda() else "cpu")
+    device = "gpu" if paddle.device.is_compiled_with_cuda() else "cpu"
+    paddle.device.set_device(device)
 
     if swanlab_logging:
         run = swanlab.init(

@@ -17,12 +17,12 @@ from typing import Union
 AttentionInput = Union[Tensor, NestedTensor]
 
 
-class KVCache(nn.Module):
+class KVCache(nn.Layer):
     def __init__(self, dim):
         super().__init__()
         assert len(dim) == 3, "Cache only supports 3d tensors"
-        self.register_buffer("k_cache", torch.zeros(*dim, requires_grad=False))
-        self.register_buffer("v_cache", torch.zeros(*dim, requires_grad=False))
+        self.register_buffer("k_cache", paddle.zeros(dim))
+        self.register_buffer("v_cache", paddle.zeros(dim))
         self.dim = dim
         
         self._reset_limits()
@@ -59,7 +59,7 @@ class KVCache(nn.Module):
             return 0
         return self.next_seq_pos
     
-    @torch.no_grad
+    @paddle.no_grad()
     def store(self, keys: Tensor, values: Tensor, mask: Tensor) -> None:
         B, N = mask.shape
         self.k_cache[:B, :N, :][mask] = keys.detach()[:, :]
@@ -69,11 +69,11 @@ class KVCache(nn.Module):
         self.next_seq_pos = mask.sum(axis=1).unsqueeze(-1)
         self.is_empty = False
     
-    @torch.no_grad
+    @paddle.no_grad()
     def append_column(self, keys: Tensor, values: Tensor) -> None:
         B, N, D = self.cache_limits
 
-        row_idx = torch.arange(B, device=self.k_cache.device)
+        row_idx = paddle.arange(B)
         self.k_cache[:B, :][row_idx, self.next_seq_pos] = keys.detach()[:, :]
         self.v_cache[:B, :][row_idx, self.next_seq_pos] = values.detach()[:, :]
 
@@ -82,14 +82,13 @@ class KVCache(nn.Module):
             self.cache_limits[1] = max_pos_appended + 1
         self.next_seq_pos += 1
     
-    @torch.no_grad
-    @torch.compiler.disable
+    @paddle.no_grad()
     def as_jagged(self):
         keys_jagged = padded_to_jagged_tensor(self.keys, lengths=self.seq_lengths.squeeze(), max_len=self.keys.shape[1])
         values_jagged = padded_to_jagged_tensor(self.values, lengths=self.seq_lengths.squeeze(), max_len=self.values.shape[1])
         return keys_jagged, values_jagged
 
-    @torch.no_grad
+    @paddle.no_grad()
     def apply(self, fn) -> None:
         B, N, D = self.cache_limits
         k_transformed, v_transformed = fn(self.k_cache[:B, :N, :D]), fn(self.v_cache[:B, :N, :D])
@@ -104,7 +103,7 @@ class KVCache(nn.Module):
         self.is_empty = False
 
 
-class Attend(nn.Module):
+class Attend(nn.Layer):
     def __init__(self, d_out, num_heads, head_dim, dropout):
         super().__init__()
 
@@ -147,7 +146,7 @@ class Attend(nn.Module):
         return context_vec
 
 
-class MultiHeadAttention(nn.Module):
+class MultiHeadAttention(nn.Layer):
     def __init__(
         self,
         d_in,
