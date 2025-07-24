@@ -62,7 +62,9 @@ def train(
     # H5 dataset parameters  
     h5_sequence_data_path="data/preprocessed/sequence_data.h5",
     h5_item_data_path="data/preprocessed/item_data.h5",
-    h5_max_seq_len=200
+    h5_max_seq_len=200,
+    # Corpus IDs caching
+    corpus_ids_cache_path="cache/corpus_ids.pkl"
 ):  
 
     if swanlab_logging:
@@ -135,7 +137,7 @@ def train(
         rqvae_codebook_normalize=vae_codebook_normalize,
         rqvae_sim_vq=vae_sim_vq
     )
-    tokenizer.precompute_corpus_ids(item_dataset)
+    tokenizer.precompute_corpus_ids(item_dataset, cache_path=corpus_ids_cache_path)
     
     # HuggingFace functionality removed
     # if push_vae_to_hf:

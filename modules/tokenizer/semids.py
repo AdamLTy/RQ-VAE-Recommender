@@ -1,4 +1,5 @@
 import math
+import os
 import paddle
 
 from data.processed import ItemData
@@ -65,14 +66,46 @@ class SemanticIdTokenizer(nn.Layer):
     def reset(self):
         self.cached_ids = None
     
+    def save_cached_ids(self, cache_path: str):
+        """Save precomputed corpus IDs to file."""
+        if self.cached_ids is None:
+            raise ValueError("No cached IDs to save. Run precompute_corpus_ids first.")
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        
+        # Save the cached IDs
+        paddle.save(self.cached_ids, cache_path)
+        print(f"Cached IDs saved to {cache_path}")
+    
+    def load_cached_ids(self, cache_path: str) -> bool:
+        """Load precomputed corpus IDs from file. Returns True if successful."""
+        if not os.path.exists(cache_path):
+            return False
+        
+        try:
+            self.cached_ids = paddle.load(cache_path)
+            print(f"Cached IDs loaded from {cache_path}, shape: {self.cached_ids.shape}")
+            return True
+        except Exception as e:
+            print(f"Failed to load cached IDs from {cache_path}: {e}")
+            return False
+    
     @property
     def sem_ids_dim(self):
         return self.n_layers + 1
     
     @paddle.no_grad()
     @eval_mode
-    def precompute_corpus_ids(self, movie_dataset: ItemData) -> Tensor:
+    def precompute_corpus_ids(self, movie_dataset: ItemData, cache_path: Optional[str] = None) -> Tensor:
         print(f"[DEBUG] precompute_corpus_ids: Starting with dataset size {len(movie_dataset)}")
+        
+        # Try to load from cache first
+        if cache_path and self.load_cached_ids(cache_path):
+            print(f"[DEBUG] precompute_corpus_ids: Successfully loaded cached IDs from {cache_path}")
+            return self.cached_ids
+        
+        print(f"[DEBUG] precompute_corpus_ids: No cache found or cache loading failed, computing corpus IDs...")
         cached_ids = None
         dedup_dim = []
         
@@ -146,6 +179,11 @@ class SemanticIdTokenizer(nn.Layer):
         print(f"[DEBUG] precompute_corpus_ids: Final packing with cached_ids shape: {cached_ids.shape}")
         self.cached_ids = pack([cached_ids, dedup_dim_tensor], "b *")[0]
         print(f"[DEBUG] precompute_corpus_ids: Final cached_ids shape: {self.cached_ids.shape}")
+        
+        # Save to cache if cache_path is provided
+        if cache_path:
+            self.save_cached_ids(cache_path)
+        
         print(f"[DEBUG] precompute_corpus_ids: Completed successfully")
         
         return self.cached_ids
