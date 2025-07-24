@@ -8,13 +8,25 @@ def cycle(dataloader):
 
 
 def batch_to(batch, device):
-    # In PaddlePaddle, tensors are already on the correct device by default
-    # but we can ensure they're on the right device if needed
+    # Handle different batch formats from PaddlePaddle DataLoader
     if isinstance(batch, SeqBatch):
+        # Move SeqBatch tensors to device if needed
+        if device is not None:
+            return SeqBatch(
+                user_ids=batch.user_ids.cuda() if device.type == 'cuda' else batch.user_ids,
+                ids=batch.ids.cuda() if device.type == 'cuda' else batch.ids,
+                ids_fut=batch.ids_fut.cuda() if device.type == 'cuda' else batch.ids_fut,
+                x=batch.x.cuda() if device.type == 'cuda' else batch.x,
+                x_fut=batch.x_fut.cuda() if device.type == 'cuda' else batch.x_fut,
+                seq_mask=batch.seq_mask.cuda() if device.type == 'cuda' else batch.seq_mask
+            )
         return batch
     elif isinstance(batch, (list, tuple)) and len(batch) == 6:
         # Handle case where DataLoader returns a list/tuple of tensors
-        return SeqBatch(*batch)
+        tensors = batch
+        if device is not None and device.type == 'cuda':
+            tensors = [t.cuda() if hasattr(t, 'cuda') else t for t in batch]
+        return SeqBatch(*tensors)
     else:
         # Fallback: assume it's already a proper batch
         return batch
