@@ -85,8 +85,15 @@ class H5PretrainedDataset:
         """Return number of active items."""
         return self.active_item_mask.sum().item()
         
-    def __getitem__(self, idx: int) -> SeqBatch:
+    def __getitem__(self, idx) -> SeqBatch:
         """Get individual item sample for RQ-VAE training."""
+        # Handle batch indices (tensor input)
+        if isinstance(idx, paddle.Tensor):
+            if idx.ndim == 0:  # Single tensor index
+                idx = idx.item()
+            else:  # Multiple indices
+                return [self[i.item()] for i in idx]
+        
         # Get active item indices
         active_item_indices = paddle.where(self.active_item_mask)[0]
         
