@@ -61,7 +61,6 @@ def train(
     data_path=None,
     # H5 dataset parameters  
     h5_sequence_data_path="data/preprocessed/sequence_data.h5",
-    h5_test_ratio=0.2,
     h5_max_seq_len=200
 ):  
 
@@ -84,7 +83,6 @@ def train(
         sequence_data_path=h5_sequence_data_path,
         is_train=True,
         max_seq_len=h5_max_seq_len,
-        test_ratio=h5_test_ratio,
         subsample=train_data_subsample
     )
     
@@ -92,7 +90,6 @@ def train(
         sequence_data_path=h5_sequence_data_path,
         is_train=False, 
         max_seq_len=h5_max_seq_len,
-        test_ratio=h5_test_ratio,
         subsample=False
     )
     
@@ -105,7 +102,6 @@ def train(
         batch_size=batch_size,
         is_train=True,
         max_seq_len=h5_max_seq_len,
-        test_ratio=h5_test_ratio,
         subsample=train_data_subsample,
         shuffle=True
     )
@@ -115,7 +111,6 @@ def train(
         batch_size=batch_size,
         is_train=False,
         max_seq_len=h5_max_seq_len,
-        test_ratio=h5_test_ratio,
         subsample=False,
         shuffle=True
     )
@@ -179,7 +174,7 @@ def train(
     print(f"Device: {device}, Num Parameters: {num_params}")
     with tqdm(initial=start_iter, total=start_iter + iterations,
               disable=False) as pbar:
-        for iter in range(iterations):
+        for step in range(iterations):
             model.train()
             total_loss = 0
             optimizer.zero_grad()
@@ -202,25 +197,47 @@ def train(
             optimizer.step()
             lr_scheduler.step()
 
-            if (iter+1) % partial_eval_every == 0:
+            if (step+1) % partial_eval_every == 0:
                 model.eval()
                 model.enable_generation = False
+                eval_debug_metrics = {}
+                eval_losses = []
+                
+                # Limit partial evaluation to a few batches for efficiency
+                eval_batch_count = 0
+                max_eval_batches = 10
+                
                 for batch in eval_dataloader:
                     data = batch_to(batch, device)
                     tokenized_data = tokenizer(data)
 
                     with paddle.no_grad():
                         model_output_eval = model(tokenized_data)
+                        eval_losses.append(model_output_eval.loss.detach().cpu().item())
 
                     if swanlab_logging:
-                        eval_debug_metrics = compute_debug_metrics(tokenized_data, model_output_eval, "eval")
-                        eval_debug_metrics["eval_loss"] = model_output_eval.loss.detach().cpu().item()
-                        swanlab.log(eval_debug_metrics)
+                        batch_eval_metrics = compute_debug_metrics(tokenized_data, model_output_eval, "eval")
+                        # Accumulate metrics
+                        for key, value in batch_eval_metrics.items():
+                            if key not in eval_debug_metrics:
+                                eval_debug_metrics[key] = []
+                            eval_debug_metrics[key].append(value)
+                    
+                    eval_batch_count += 1
+                    if eval_batch_count >= max_eval_batches:
+                        break
+                
+                # Average the metrics
+                if swanlab_logging and eval_debug_metrics:
+                    for key in eval_debug_metrics:
+                        eval_debug_metrics[key] = sum(eval_debug_metrics[key]) / len(eval_debug_metrics[key])
+                    eval_debug_metrics["eval_loss"] = sum(eval_losses) / len(eval_losses)
+                    swanlab.log(eval_debug_metrics)
 
-            if (iter+1) % full_eval_every == 0:
+            if (step+1) % full_eval_every == 0:
                 model.eval()
                 model.enable_generation = True
-                with tqdm(eval_dataloader, desc=f'Eval {iter+1}', disable=False) as pbar_eval:
+                with tqdm(eval_dataloader, desc=f'Eval {step+1}', disable=False) as pbar_eval:
                     for batch in pbar_eval:
                         data = batch_to(batch, device)
                         tokenized_data = tokenizer(data)
@@ -229,9 +246,6 @@ def train(
                         actual, top_k = tokenized_data.sem_ids_fut, generated.sem_ids
 
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)
-
-                        if swanlab_logging:
-                            swanlab.log(eval_debug_metrics)
                 
                 eval_metrics = metrics_accumulator.reduce()
                 
@@ -242,9 +256,9 @@ def train(
                 metrics_accumulator.reset()
 
             if True:
-                if (iter+1) % save_model_every == 0 or iter+1 == iterations:
+                if (step+1) % save_model_every == 0 or step+1 == iterations:
                     state = {
-                        "iter": iter,
+                        "iter": step,
                         "model": model.state_dict(),
                         "optimizer": optimizer.state_dict(),
                         "scheduler": lr_scheduler.state_dict()
@@ -253,7 +267,7 @@ def train(
                     if not os.path.exists(save_dir_root):
                         os.makedirs(save_dir_root)
 
-                    paddle.save(state, save_dir_root + f"checkpoint_{iter}.pt")
+                    paddle.save(state, save_dir_root + f"checkpoint_{step}.pdparams")
                 
                 if swanlab_logging:
                     swanlab.log({

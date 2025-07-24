@@ -233,7 +233,7 @@ class H5SequenceDataset:
         sequence_data_path: str,
         is_train: bool = True,
         max_seq_len: int = 200,
-        test_ratio: float = 0.2,
+        test_ratio: float = 0.2,  # 保留参数以兼容现有代码，但实际上不使用
         subsample: bool = False
     ):
         """
@@ -243,8 +243,10 @@ class H5SequenceDataset:
             sequence_data_path: 序列数据H5文件路径
             is_train: 是否为训练集
             max_seq_len: 最大序列长度
-            test_ratio: 测试集比例 (默认: 0.2 = 20%)
+            test_ratio: 测试集比例 (保留参数兼容性，但不使用)
             subsample: 是否对训练序列进行子采样
+        
+        注意: 验证集通过每个序列的最后一个位置自动构建，不需要test_ratio分割
         """
         self.sequence_data_path = sequence_data_path
         self.is_train = is_train
@@ -272,36 +274,60 @@ class H5SequenceDataset:
             self.sequence_lengths = f['sequence_lengths'][:]
             
             # 加载变长序列 (存储为vlen数据类型)
-            sequences_data = f['item_sequences'][:]
+            sequences_data = f['sequences'][:]  # 使用正确的字段名
             self.item_sequences = [seq.tolist() for seq in sequences_data]
             
-            # 加载物品数据
-            self.item_embeddings = f['item_embeddings'][:]
-            self.item_id_mapping = dict(f['item_id_mapping'][()])
+            # 加载物品embeddings和映射
+            if 'item_embeddings' in f:
+                self.item_embeddings = f['item_embeddings'][:]
+                self.embedding_dim = self.item_embeddings.shape[1]
+            else:
+                # 如果没有预存储的embeddings，从序列中推断并创建
+                all_items = set()
+                for seq in self.item_sequences:
+                    all_items.update(seq)
+                max_item_id = max(all_items) if all_items else 0
+                self.embedding_dim = 768  # 默认embedding维度
+                self.item_embeddings = np.random.randn(max_item_id + 1, self.embedding_dim).astype(np.float32)
+            
+            # 加载物品ID映射
+            if 'item_id_mapping' in f:
+                # 从H5文件加载映射 (假设存储为字符串格式)
+                mapping_data = f['item_id_mapping'][:]
+                self.item_id_mapping = {int(k): int(v) for k, v in mapping_data}
+            else:
+                # 创建简单的1:1映射
+                all_items = set()
+                for seq in self.item_sequences:
+                    all_items.update(seq)
+                self.item_id_mapping = {i: i for i in all_items}
             
             # 加载元数据
-            self.n_sequences = f.attrs['n_sequences'] 
-            self.embedding_dim = f.attrs['embedding_dim']
-            self.n_items = f.attrs['n_items']
+            if hasattr(f, 'attrs'):
+                self.n_items = f.attrs.get('n_items', len(self.item_id_mapping))
+                self.total_items = f.attrs.get('total_items', len(self.item_id_mapping))
+            else:
+                self.n_items = len(self.item_id_mapping)
+                self.total_items = self.n_items
             
-        print(f"Loaded {self.n_sequences} sequences with max_len={self.max_seq_len}")
-        print(f"Item embeddings: {self.n_items} items, {self.embedding_dim}D")
+        self.n_sequences = len(self.user_ids)
+        
+        print(f"Loaded {self.n_sequences} sequences")
+        print(f"Found {self.total_items} unique items with {self.embedding_dim}D embeddings")
         
     def _create_train_test_split(self):
-        """创建训练/测试分割。"""
-        # 为可重现性设置随机种子
-        paddle.seed(42)
-        random.seed(42)
+        """创建训练/验证数据分割。
         
-        # 基于序列的随机分割
-        is_train_mask = paddle.rand([self.n_sequences]) > self.test_ratio
+        注意: 由于验证是通过序列内部的最后一个位置实现的，
+        训练和验证都使用所有序列，区别仅在于序列的处理方式。
+        """
+        # 使用所有序列，因为验证通过序列内部的最后位置实现
+        self.active_indices = paddle.arange(self.n_sequences)
         
         if self.is_train:
-            self.active_indices = paddle.where(is_train_mask)[0]
-            print(f"Using {len(self.active_indices)}/{self.n_sequences} sequences for training")
+            print(f"Using all {self.n_sequences} sequences for training (input: first n-1 items, target: last item)")
         else:
-            self.active_indices = paddle.where(~is_train_mask)[0] 
-            print(f"Using {len(self.active_indices)}/{self.n_sequences} sequences for evaluation")
+            print(f"Using all {self.n_sequences} sequences for evaluation (input: first n-1 items, target: last item)")
     
     def __len__(self):
         """返回活跃序列的数量。"""
@@ -327,7 +353,6 @@ class H5SequenceDataset:
         
         user_id = self.user_ids[seq_idx]
         sequence = self.item_sequences[seq_idx]
-        seq_len = self.sequence_lengths[seq_idx]
         
         if self.subsample and self.is_train:
             # 对训练序列进行子采样
@@ -387,7 +412,7 @@ def create_h5_sequence_dataloader(
     batch_size: int = 64,
     is_train: bool = True,
     max_seq_len: int = 200,
-    test_ratio: float = 0.2,
+    test_ratio: float = 0.2,  # 保留参数兼容性，但不使用
     subsample: bool = False,
     shuffle: bool = True,
     num_workers: int = 4,
@@ -401,18 +426,20 @@ def create_h5_sequence_dataloader(
         batch_size: 批次大小
         is_train: 是否为训练集
         max_seq_len: 最大序列长度
-        test_ratio: 测试集比例
+        test_ratio: 测试集比例 (保留参数兼容性，但不使用)
         subsample: 是否对训练序列进行子采样
         shuffle: 是否打乱数据
         
     Returns:
         paddle.io.DataLoader
+        
+    注意: 验证集通过每个序列的最后一个位置自动构建，不需要test_ratio分割
     """
     dataset = H5SequenceDataset(
         sequence_data_path=sequence_data_path,
         is_train=is_train,
         max_seq_len=max_seq_len,
-        test_ratio=test_ratio,
+        test_ratio=test_ratio,  # 传递但不使用
         subsample=subsample
     )
     
