@@ -131,9 +131,9 @@ class RqVae(nn.Layer):
             embs.append(emb)
 
         return RqVaeOutput(
-            embeddings=rearrange(embs, "b h d -> h d b"),
-            residuals=rearrange(residuals, "b h d -> h d b"),
-            sem_ids=rearrange(sem_ids, "b d -> d b"),
+            embeddings=rearrange(torch.stack(embs), "h b d -> h d b"),
+            residuals=rearrange(torch.stack(residuals), "h b d -> h d b"),
+            sem_ids=rearrange(torch.stack(sem_ids), "h b -> h b"),
             quantize_loss=quantize_loss
         )
 
