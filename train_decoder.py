@@ -18,10 +18,8 @@ from modules.tokenizer.semids import SemanticIdTokenizer
 from modules.utils import compute_debug_metrics
 from modules.utils import parse_config
 from huggingface_hub import login
-from torch.optim import AdamW
-from torch.utils.data import BatchSampler
-from torch.utils.data import DataLoader
-from torch.utils.data import RandomSampler
+from paddle.optimizer import AdamW
+from paddle.io import DataLoader
 from tqdm import tqdm
 
 
@@ -65,8 +63,6 @@ def train(
     vae_hf_model_name="edobotta/rqvae-amazon-beauty",
     data_path=None
 ):  
-    if dataset != RecDataset.AMAZON:
-        raise Exception(f"Dataset currently not supported: {dataset}.")
 
     if swanlab_logging:
         params = locals()
@@ -161,7 +157,7 @@ def train(
     
     start_iter = 0
     if pretrained_decoder_path is not None:
-        checkpoint = torch.load(pretrained_decoder_path, map_location=device, weights_only=False)
+        checkpoint = paddle.load(pretrained_decoder_path)
         model.load_state_dict(checkpoint["model"])
         optimizer.load_state_dict(checkpoint["optimizer"])
         if "scheduler" in checkpoint:
@@ -212,7 +208,7 @@ def train(
                     data = batch_to(batch, device)
                     tokenized_data = tokenizer(data)
 
-                    with torch.no_grad():
+                    with paddle.no_grad():
                         model_output_eval = model(tokenized_data)
 
                     if swanlab_logging and accelerator.is_main_process:
@@ -256,7 +252,7 @@ def train(
                     if not os.path.exists(save_dir_root):
                         os.makedirs(save_dir_root)
 
-                    torch.save(state, save_dir_root + f"checkpoint_{iter}.pt")
+                    paddle.save(state, save_dir_root + f"checkpoint_{iter}.pt")
                 
                 if swanlab_logging:
                     swanlab.log({
