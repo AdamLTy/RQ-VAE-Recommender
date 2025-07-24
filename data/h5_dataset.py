@@ -151,7 +151,7 @@ def create_h5_dataloader(
     train_test_split: str = "train",
     test_ratio: float = 0.05,
     shuffle: bool = True,
-    num_workers: int = 4,
+    num_workers: int = 0,
     prefetch_factor: int = 2
 ) -> paddle.io.DataLoader:
     """
@@ -415,7 +415,7 @@ def create_h5_sequence_dataloader(
     test_ratio: float = 0.2,  # 保留参数兼容性，但不使用
     subsample: bool = False,
     shuffle: bool = True,
-    num_workers: int = 4,
+    num_workers: int = 0,
     prefetch_factor: int = 2
 ) -> paddle.io.DataLoader:
     """
