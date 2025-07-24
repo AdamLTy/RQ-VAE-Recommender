@@ -4,7 +4,6 @@ import polars as pl
 import paddle
 from data.schemas import FUT_SUFFIX
 from einops import rearrange
-from sentence_transformers import SentenceTransformer
 from typing import List
 
 
@@ -38,10 +37,8 @@ class PreprocessingMixin:
 
     @staticmethod
     def _encode_text_feature(text_feat, model=None):
-        if model is None:
-            model = SentenceTransformer('sentence-transformers/sentence-t5-xl')
-        embeddings = model.encode(sentences=text_feat, show_progress_bar=True, convert_to_tensor=True).cpu()
-        return embeddings
+        # Text encoding functionality removed - sentence_transformers dependency removed
+        raise NotImplementedError("Text encoding functionality removed due to PyTorch dependency")
     
     @staticmethod
     def _rolling_window(group, features, window_size=200, stride=1):
