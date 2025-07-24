@@ -133,12 +133,12 @@ class Quantize(nn.Layer):
             elif self.forward_mode == QuantizeForwardMode.ROTATION_TRICK:
                 emb = self.get_item_embeddings(ids)
                 emb_out = efficient_rotation_trick_transform(
-                    paddle.divide(x, paddle.add(paddle.norm(x, p=2, axis=-1, keepdim=True), 1e-8)),
-                    paddle.divide(emb, paddle.add(paddle.norm(emb, p=2, axis=-1, keepdim=True), 1e-8)),
+                    paddle.divide(x, paddle.add(paddle.norm(x, p=2, axis=-1, keepdim=True), paddle.to_tensor(1e-8))),
+                    paddle.divide(emb, paddle.add(paddle.norm(emb, p=2, axis=-1, keepdim=True), paddle.to_tensor(1e-8))),
                     x
                 )
                 emb_out = emb_out * (
-                    paddle.divide(paddle.norm(emb, p=2, axis=1, keepdim=True), paddle.add(paddle.norm(x, p=2, axis=1, keepdim=True), 1e-6))
+                    paddle.divide(paddle.norm(emb, p=2, axis=1, keepdim=True), paddle.add(paddle.norm(x, p=2, axis=1, keepdim=True), paddle.to_tensor(1e-6)))
                 ).detach()
             else:
                 raise Exception("Unsupported Quantize forward mode.")
