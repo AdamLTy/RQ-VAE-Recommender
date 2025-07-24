@@ -194,12 +194,10 @@ def create_h5_dataloader(
             seq_mask=seq_mask
         )
     
-    sampler = paddle.io.RandomSampler(dataset) if shuffle else None
-    
     return paddle.io.DataLoader(
         dataset,
         batch_size=batch_size,
-        sampler=sampler,
+        shuffle=shuffle,
         collate_fn=collate_fn,
         num_workers=num_workers,
         use_shared_memory=False,
@@ -448,12 +446,10 @@ def create_h5_sequence_dataloader(
             seq_mask=seq_mask
         )
     
-    sampler = paddle.io.RandomSampler(dataset) if shuffle else None
-    
     return paddle.io.DataLoader(
         dataset,
         batch_size=batch_size,
-        sampler=sampler,
+        shuffle=shuffle,
         collate_fn=collate_fn,
         num_workers=num_workers,
         use_shared_memory=False,
