@@ -133,7 +133,7 @@ class RqVae(nn.Layer):
         return RqVaeOutput(
             embeddings=rearrange(paddle.stack(embs), "h b d -> h d b"),
             residuals=rearrange(paddle.stack(residuals), "h b d -> h d b"),
-            sem_ids=rearrange(paddle.stack(sem_ids), "h b -> h b"),
+            sem_ids=rearrange(paddle.stack(sem_ids), "h b -> b h"),
             quantize_loss=quantize_loss
         )
 
