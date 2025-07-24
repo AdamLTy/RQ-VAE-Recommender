@@ -149,7 +149,8 @@ def create_h5_dataloader(
     batch_size: int = 64,
     train_test_split: str = "train",
     test_ratio: float = 0.05,
-    shuffle: bool = True
+    shuffle: bool = True,
+    num_workers: int = 8
 ) -> paddle.io.DataLoader:
     """
     Create DataLoader for H5 pretrained dataset (RQ-VAE training).
@@ -204,5 +205,6 @@ def create_h5_dataloader(
         batch_size=batch_size,
         sampler=sampler,
         collate_fn=collate_fn,
-        num_workers=0  # Set to 0 for debugging, increase for production
+        num_workers=num_workers,
+        use_shared_memory=True  # 提高多进程性能
     )

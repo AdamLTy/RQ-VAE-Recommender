@@ -46,7 +46,10 @@ class RqVae(nn.Layer):
         commitment_weight: float = 0.25,
         n_cat_features: int = 18,
     ) -> None:
-        self._config = locals()
+        # Store config without 'self' to avoid circular references
+        config_locals = locals()
+        config_locals.pop('self')
+        self._config = config_locals
         
         super().__init__()
 
