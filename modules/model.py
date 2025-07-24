@@ -108,7 +108,7 @@ class EncoderDecoderRetrievalModel(nn.Module):
         pos = paddle.arange(N).unsqueeze(0)
         wpe = self.wpe(pos)
 
-        input_embedding = paddle.concat([user_emb, wpe + sem_ids_emb], axis=1)
+        input_embedding = paddle.concat([user_emb, paddle.add(wpe, sem_ids_emb)], axis=1)
         input_embedding_fut = self.bos_emb.repeat(B, 1, 1)
         if sem_ids_emb_fut is not None:
             tte_fut = self.tte(batch.token_type_ids_fut)
