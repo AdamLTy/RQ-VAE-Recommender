@@ -4,9 +4,9 @@ import paddle
 import numpy as np
 import swanlab
 
-from data.processed import ItemData
 from data.processed import RecDataset
-from data.h5_dataset import create_h5_dataloader
+from data.h5_dataset import H5PretrainedDataset
+from data.schemas import SeqBatch
 from data.utils import batch_to
 from data.utils import cycle
 from data.utils import next_batch
@@ -15,9 +15,6 @@ from modules.quantize import QuantizeForwardMode
 from modules.tokenizer.semids import SemanticIdTokenizer
 from modules.utils import parse_config
 from paddle.optimizer import AdamW
-from paddle.io import BatchSampler
-from paddle.io import DataLoader
-from paddle.io import RandomSampler
 from tqdm import tqdm
 
 
@@ -27,17 +24,12 @@ def train(
     batch_size=64,
     learning_rate=0.0001,
     weight_decay=0.01,
-    dataset_folder="dataset/ml-1m",
-    dataset=RecDataset.ML_1M,
     pretrained_rqvae_path=None,
     save_dir_root="out/",
     use_kmeans_init=True,
-    split_batches=True,
     amp=False,
     swanlab_logging=False,
     do_eval=True,
-    force_dataset_process=False,
-    mixed_precision_type="fp16",
     gradient_accumulate_every=1,
     save_model_every=1000000,
     eval_every=50000,
@@ -51,73 +43,71 @@ def train(
     vae_codebook_mode=QuantizeForwardMode.GUMBEL_SOFTMAX,
     vae_sim_vq=False,
     vae_n_layers=3,
-    dataset_split="beauty",
-    data_path=None,
     # H5 dataset parameters
-    use_h5_dataset=False,
     h5_item_data_path="data/preprocessed/item_data.h5",
-    h5_sequence_data_path="data/preprocessed/sequence.h5",
-    h5_max_seq_len=200,
     h5_test_ratio=0.2
 ):
     if swanlab_logging:
         params = locals()
 
     # Set device for PaddlePaddle
-    if paddle.device.is_compiled_with_cuda():
-        paddle.device.set_device("gpu")
-    else:
-        paddle.device.set_device("cpu")
+    device = "gpu" if paddle.device.is_compiled_with_cuda() else "cpu"
+    paddle.device.set_device(device)
 
-    if use_h5_dataset:
-        print("Using H5 pretrained dataset")
-        # Load H5 dataset
-        train_dataloader = create_h5_dataloader(
+    print("Using H5 pretrained dataset")
+    # Create dataset object for kmeans initialization and evaluation
+    train_dataset = H5PretrainedDataset(
+        item_data_path=h5_item_data_path,
+        train_test_split="train" if do_eval else "all",
+        test_ratio=h5_test_ratio
+    )
+    
+    # Define collate function for batching
+    def collate_fn(batch):
+        if len(batch) == 1:
+            return batch[0]
+        # Concatenate item-level tensors
+        user_ids = paddle.concat([item.user_ids for item in batch], axis=0)
+        ids = paddle.concat([item.ids for item in batch], axis=0)
+        ids_fut = paddle.concat([item.ids_fut for item in batch], axis=0)
+        x = paddle.concat([item.x for item in batch], axis=0)
+        x_fut = paddle.concat([item.x_fut for item in batch], axis=0)
+        seq_mask = paddle.concat([item.seq_mask for item in batch], axis=0)
+        return SeqBatch(user_ids=user_ids, ids=ids, ids_fut=ids_fut, x=x, x_fut=x_fut, seq_mask=seq_mask)
+    
+    # Create train dataloader
+    train_dataloader = paddle.io.DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        sampler=paddle.io.RandomSampler(train_dataset),
+        collate_fn=collate_fn,
+        num_workers=0
+    )
+    train_dataloader = cycle(train_dataloader)
+    
+    if do_eval:
+        eval_dataset = H5PretrainedDataset(
             item_data_path=h5_item_data_path,
-            sequence_data_path=h5_sequence_data_path,
-            batch_size=batch_size,
-            max_seq_len=h5_max_seq_len,
-            train_test_split="train" if do_eval else "all",
-            test_ratio=h5_test_ratio,
-            shuffle=True
+            train_test_split="eval",
+            test_ratio=h5_test_ratio
         )
-        train_dataloader = cycle(train_dataloader)
-        
-        if do_eval:
-            eval_dataloader = create_h5_dataloader(
-                item_data_path=h5_item_data_path,
-                sequence_data_path=h5_sequence_data_path,
-                batch_size=batch_size,
-                max_seq_len=h5_max_seq_len,
-                train_test_split="test",
-                test_ratio=h5_test_ratio,
-                shuffle=False
-            )
-        
-        # For H5 dataset, we need to get embedding dimension from the data
-        import h5py
-        with h5py.File(h5_item_data_path, 'r') as f:
-            h5_embedding_dim = f.attrs['embedding_dim']
-        vae_input_dim = h5_embedding_dim
-        print(f"H5 dataset embedding dimension: {h5_embedding_dim}")
-        
-        # Set index_dataset to None for H5 (not needed for evaluation in this context)
-        index_dataset = None
-        
-    else:
-        print("Using original dataset format")
-        # Original dataset loading
-        train_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=force_dataset_process, train_test_split="train" if do_eval else "all", split=dataset_split, data_path=data_path)
-        train_sampler = BatchSampler(RandomSampler(train_dataset), batch_size, False)
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=None, collate_fn=lambda batch: batch)
-        train_dataloader = cycle(train_dataloader)
-
-        if do_eval:
-            eval_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="eval", split=dataset_split, data_path=data_path)
-            eval_sampler = BatchSampler(RandomSampler(eval_dataset), batch_size, False)
-            eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=None, collate_fn=lambda batch: batch)
-
-        index_dataset = ItemData(root=dataset_folder, dataset=dataset, force_process=False, train_test_split="all", split=dataset_split, data_path=data_path) if do_eval else train_dataset
+        eval_dataloader = paddle.io.DataLoader(
+            eval_dataset,
+            batch_size=batch_size,
+            sampler=None,
+            collate_fn=collate_fn,
+            num_workers=0
+        )
+    
+    # For H5 dataset, we need to get embedding dimension from the data
+    import h5py
+    with h5py.File(h5_item_data_path, 'r') as f:
+        h5_embedding_dim = f.attrs['embedding_dim']
+    vae_input_dim = h5_embedding_dim
+    print(f"H5 dataset embedding dimension: {h5_embedding_dim}")
+    
+    # Use train_dataset for evaluation (same as original logic)
+    index_dataset = train_dataset
 
     model = RqVae(
         input_dim=vae_input_dim,
@@ -140,7 +130,7 @@ def train(
     )
 
     if swanlab_logging:
-        run = swanlab.init(
+        swanlab.init(
             project="rq-vae-training",
             config=params
         )

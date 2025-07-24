@@ -76,7 +76,6 @@ attrs['original_order_preserved']: bool
 'user_ids': shape=(n_sequences,), dtype=vlen string
 'sequences': shape=(n_sequences,), dtype=vlen np.int64
 'sequence_lengths': shape=(n_sequences,), dtype=np.int32
-'timestamps': shape=(n_sequences,), dtype=vlen np.int64  # 可选，用于时间划分
 
 # 属性
 attrs['n_sequences']: int
@@ -87,14 +86,13 @@ attrs['order_preserved']: bool
 ```
 
 **重要说明**: 
-- `timestamps`字段是**可选的**，如果存在，会使用基于时间的数据划分（推荐）
-- 如果没有`timestamps`字段，会退化为基于索引的简单划分
-- `timestamps[i]`包含第i个序列中每个交互的时间戳数组
+- 序列只包含点击顺序信息，不包含时间戳
+- 数据划分基于序列内部的顺序进行
 
 ## 数据划分策略
 
-### 序列内部时间划分（与原始数据集一致）
-H5数据集现在使用与原始数据集完全相同的划分策略：
+### 序列内部顺序划分
+H5数据集使用基于点击顺序的划分策略：
 
 - **训练样本**: 使用完整序列，目标设为-1
   - 输入: `[item1, item2, ..., itemN]`
@@ -105,7 +103,7 @@ H5数据集现在使用与原始数据集完全相同的划分策略：
   - 目标: `itemN`
 
 **优势**:
-- ✅ 完全符合原始数据集的时间顺序逻辑
+- ✅ 基于点击顺序的自然分割
 - ✅ 避免数据泄露，符合推荐系统真实场景
 - ✅ 每个用户序列都参与训练和验证
 
@@ -151,11 +149,8 @@ with h5py.File('data/preprocessed/item_data.h5', 'r') as f:
 with h5py.File('data/preprocessed/sequence.h5', 'r') as f:
     print("Sequence数据集:", list(f.keys()))
     print("Sequence属性:", dict(f.attrs))
-    print("是否包含timestamps:", 'timestamps' in f)
-    if 'timestamps' in f:
-        print("将使用时间划分")
-    else:
-        print("将使用索引划分")
+    print("序列数量:", f.attrs['n_sequences'])
+    print("使用点击顺序划分")
 ```
 
 ## 示例代码

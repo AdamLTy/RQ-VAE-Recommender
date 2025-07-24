@@ -64,7 +64,7 @@ class ItemData(Dataset):
         elif train_test_split == "eval":
             filt = ~raw_data.data["item"]["is_train"]
         elif train_test_split == "all":
-            filt = torch.ones_like(raw_data.data["item"]["x"][:,0], dtype=bool)
+            filt = paddle.ones_like(raw_data.data["item"]["x"][:,0], dtype=paddle.bool)
 
         self.item_data, self.item_text = raw_data.data["item"]["x"][filt], raw_data.data["item"]["text"][filt]
 
@@ -72,15 +72,15 @@ class ItemData(Dataset):
         return self.item_data.shape[0]
 
     def __getitem__(self, idx):
-        item_ids = torch.tensor(idx).unsqueeze(0) if not isinstance(idx, torch.Tensor) else idx
+        item_ids = paddle.to_tensor(idx).unsqueeze(0) if not isinstance(idx, paddle.Tensor) else idx
         x = self.item_data[idx, :768]
         return SeqBatch(
-            user_ids=-1 * torch.ones_like(item_ids.squeeze(0)),
+            user_ids=-1 * paddle.ones_like(item_ids.squeeze(0)),
             ids=item_ids,
-            ids_fut=-1 * torch.ones_like(item_ids.squeeze(0)),
+            ids_fut=-1 * paddle.ones_like(item_ids.squeeze(0)),
             x=x,
-            x_fut=-1 * torch.ones_like(item_ids.squeeze(0)),
-            seq_mask=torch.ones_like(item_ids, dtype=bool)
+            x_fut=-1 * paddle.ones_like(item_ids.squeeze(0)),
+            seq_mask=paddle.ones_like(item_ids, dtype=paddle.bool)
         )
 
 
@@ -115,8 +115,8 @@ class SeqData(Dataset):
         self.sequence_data = raw_data.data[("user", "rated", "item")]["history"][split]
 
         if not self.subsample:
-            self.sequence_data["itemId"] = torch.nn.utils.rnn.pad_sequence(
-                [torch.tensor(l[-max_seq_len:]) for l in self.sequence_data["itemId"]],
+            self.sequence_data["itemId"] = paddle.nn.utils.rnn.pad_sequence(
+                [paddle.to_tensor(l[-max_seq_len:]) for l in self.sequence_data["itemId"]],
                 batch_first=True,
                 padding_value=-1
             )
@@ -142,8 +142,8 @@ class SeqData(Dataset):
             end_idx = random.randint(start_idx+3, start_idx+self.max_seq_len+1)
             sample = seq[start_idx:end_idx]
             
-            item_ids = torch.tensor(sample[:-1] + [-1] * (self.max_seq_len - len(sample[:-1])))
-            item_ids_fut = torch.tensor([sample[-1]])
+            item_ids = paddle.to_tensor(sample[:-1] + [-1] * (self.max_seq_len - len(sample[:-1])))
+            item_ids_fut = paddle.to_tensor([sample[-1]])
 
         else:
             item_ids = self.sequence_data["itemId"][idx]

@@ -16,6 +16,7 @@ from paddle import nn
 from paddle import Tensor
 from paddle.io import BatchSampler
 from paddle.io import DataLoader
+from paddle.io import SequentialSampler
 
 BATCH_SIZE = 16
 

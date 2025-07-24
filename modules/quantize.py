@@ -36,7 +36,7 @@ def efficient_rotation_trick_transform(u, q, e):
     4.2 in https://arxiv.org/abs/2410.06424
     """
     e = rearrange(e, 'b d -> b 1 d')
-    w = F.normalize(u + q, p=2, dim=1, eps=1e-6).detach()
+    w = F.normalize(u + q, p=2, axis=1, eps=1e-6).detach()
 
     return (
         e -
@@ -112,8 +112,8 @@ class Quantize(nn.Layer):
             )
         elif self.distance_mode == QuantizeDistance.COSINE:
             dist = -(
-                x / x.norm(dim=1, keepdim=True) @
-                (codebook.T) / codebook.T.norm(dim=0, keepdim=True)
+                x / x.norm(axis=1, keepdim=True) @
+                (codebook.T) / codebook.T.norm(axis=0, keepdim=True)
             )
         else:
             raise Exception("Unsupported Quantize distance mode.")
