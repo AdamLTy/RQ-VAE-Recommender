@@ -17,7 +17,7 @@ from modules.scheduler.inv_sqrt import InverseSquareRootScheduler
 from modules.tokenizer.semids import SemanticIdTokenizer
 from modules.utils import compute_debug_metrics
 from modules.utils import parse_config
-from huggingface_hub import login
+# from huggingface_hub import login
 from paddle.optimizer import AdamW
 from paddle.io import DataLoader
 from tqdm import tqdm
@@ -132,9 +132,10 @@ def train(
     )
     tokenizer.precompute_corpus_ids(item_dataset)
     
-    if push_vae_to_hf:
-        login()
-        tokenizer.rq_vae.push_to_hub(vae_hf_model_name)
+    # HuggingFace functionality removed
+    # if push_vae_to_hf:
+    #     login()
+    #     tokenizer.rq_vae.push_to_hub(vae_hf_model_name)
 
     model = EncoderDecoderRetrievalModel(
         embedding_dim=decoder_embed_dim,
