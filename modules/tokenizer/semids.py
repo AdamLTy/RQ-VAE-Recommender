@@ -16,7 +16,7 @@ from paddle import nn
 from paddle import Tensor
 from paddle.io import BatchSampler
 from paddle.io import DataLoader
-from paddle.io import SequentialSampler
+from paddle.io import SequenceSampler
 
 BATCH_SIZE = 16
 
@@ -77,7 +77,7 @@ class SemanticIdTokenizer(nn.Layer):
         cached_ids = None
         dedup_dim = []
         sampler = BatchSampler(
-            SequentialSampler(range(len(movie_dataset))), batch_size=512, drop_last=False
+            SequenceSampler(range(len(movie_dataset))), batch_size=512, drop_last=False
         )
         dataloader = DataLoader(movie_dataset, sampler=sampler, shuffle=False, collate_fn=lambda batch: batch[0])
         for batch in dataloader:
