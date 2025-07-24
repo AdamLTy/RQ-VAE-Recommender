@@ -136,7 +136,14 @@ class SemanticIdTokenizer(nn.Layer):
         return out
     
     def _tokenize_seq_batch_from_cached(self, ids: Tensor) -> Tensor:
-        return rearrange(self.cached_ids[ids.flatten(), :], "(b n) d -> b (n d)", n=ids.shape[1])
+        # Handle both 1D (item-level) and 2D (sequence-level) ids
+        if ids.ndim == 1:
+            # H5 dataset: item-level data, N=1 
+            n = 1
+        else:
+            # Regular sequence data
+            n = ids.shape[1]
+        return rearrange(self.cached_ids[ids.flatten(), :], "(b n) d -> b (n d)", n=n)
     
     @paddle.no_grad()
     @eval_mode
@@ -145,12 +152,26 @@ class SemanticIdTokenizer(nn.Layer):
         # If block has to return 3-sized ids for use in precompute_corpus_ids
         # Else block has to return deduped 4-sized ids for use in decoder training.
         if self.cached_ids is None or batch.ids.max() >= self.cached_ids.shape[0]:
-            B, N = batch.ids.shape
+            # Handle both sequence data (2D) and item data (1D) from H5 dataset
+            if batch.ids.ndim == 1:
+                # H5 dataset: item-level data, treat each item as single-item sequence
+                B = batch.ids.shape[0]
+                N = 1
+            else:
+                # Regular sequence data
+                B, N = batch.ids.shape
             sem_ids = self.rq_vae.get_semantic_ids(batch.x).sem_ids
             D = sem_ids.shape[-1]
             seq_mask, sem_ids_fut = None, None
         else:
-            B, N = batch.ids.shape
+            # Handle both sequence data (2D) and item data (1D) from H5 dataset  
+            if batch.ids.ndim == 1:
+                # H5 dataset: item-level data
+                B = batch.ids.shape[0]
+                N = 1
+            else:
+                # Regular sequence data
+                B, N = batch.ids.shape
             _, D = self.cached_ids.shape
             sem_ids = self._tokenize_seq_batch_from_cached(batch.ids)
             seq_mask = batch.seq_mask.repeat_interleave(D, dim=1)
