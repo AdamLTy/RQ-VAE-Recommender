@@ -74,7 +74,28 @@ class SemanticIdTokenizer(nn.Layer):
     def precompute_corpus_ids(self, movie_dataset: ItemData) -> Tensor:
         cached_ids = None
         dedup_dim = []
-        dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False)
+        
+        # Define collate function for H5 dataset compatibility
+        def collate_fn(batch):
+            if len(batch) == 1:
+                return batch[0]
+            # Check if using H5Dataset that needs item-level batching
+            from data.h5_dataset import H5PretrainedDataset
+            if isinstance(movie_dataset, H5PretrainedDataset):
+                # Concatenate item-level tensors for H5 dataset
+                from data.schemas import SeqBatch
+                user_ids = paddle.concat([item.user_ids for item in batch], axis=0)
+                ids = paddle.concat([item.ids for item in batch], axis=0)
+                ids_fut = paddle.concat([item.ids_fut for item in batch], axis=0)
+                x = paddle.concat([item.x for item in batch], axis=0)
+                x_fut = paddle.concat([item.x_fut for item in batch], axis=0)
+                seq_mask = paddle.concat([item.seq_mask for item in batch], axis=0)
+                return SeqBatch(user_ids=user_ids, ids=ids, ids_fut=ids_fut, x=x, x_fut=x_fut, seq_mask=seq_mask)
+            else:
+                # Default behavior for other datasets
+                return batch
+        
+        dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False, collate_fn=collate_fn)
         for batch in dataloader:
             batch_ids = self.forward(batch_to(batch, self.rq_vae.device)).sem_ids
             # Detect in-batch duplicates
