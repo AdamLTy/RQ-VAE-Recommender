@@ -74,7 +74,7 @@ class SemanticIdTokenizer(nn.Layer):
     def precompute_corpus_ids(self, movie_dataset: ItemData) -> Tensor:
         cached_ids = None
         dedup_dim = []
-        dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False, collate_fn=lambda batch: batch[0])
+        dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False)
         for batch in dataloader:
             batch_ids = self.forward(batch_to(batch, self.rq_vae.device)).sem_ids
             # Detect in-batch duplicates
