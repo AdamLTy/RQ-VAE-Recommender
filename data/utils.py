@@ -10,7 +10,14 @@ def cycle(dataloader):
 def batch_to(batch, device):
     # In PaddlePaddle, tensors are already on the correct device by default
     # but we can ensure they're on the right device if needed
-    return SeqBatch(*[v for _,v in batch._asdict().items()])
+    if isinstance(batch, SeqBatch):
+        return batch
+    elif isinstance(batch, (list, tuple)) and len(batch) == 6:
+        # Handle case where DataLoader returns a list/tuple of tensors
+        return SeqBatch(*batch)
+    else:
+        # Fallback: assume it's already a proper batch
+        return batch
 
 
 def next_batch(dataloader, device):
