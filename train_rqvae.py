@@ -75,15 +75,11 @@ def train(
         seq_mask = paddle.concat([item.seq_mask for item in batch], axis=0)
         return SeqBatch(user_ids=user_ids, ids=ids, ids_fut=ids_fut, x=x, x_fut=x_fut, seq_mask=seq_mask)
     
-    # Create train dataloader with sampler
-    train_sampler = paddle.io.RandomSampler(train_dataset)
+    # Create train dataloader with shuffle (equivalent to RandomSampler)
     train_dataloader = paddle.io.DataLoader(
         train_dataset,
-        batch_sampler=paddle.io.BatchSampler(
-            sampler=train_sampler,
-            batch_size=batch_size,
-            drop_last=False
-        ),
+        batch_size=batch_size,
+        shuffle=True,
         collate_fn=collate_fn,
         num_workers=0
     )
@@ -95,15 +91,11 @@ def train(
             train_test_split="eval",
             test_ratio=h5_test_ratio
         )
-        # Create eval dataloader with sequential sampler
-        eval_sampler = paddle.io.SequentialSampler(eval_dataset)
+        # Create eval dataloader without shuffle (sequential)
         eval_dataloader = paddle.io.DataLoader(
             eval_dataset,
-            batch_sampler=paddle.io.BatchSampler(
-                sampler=eval_sampler,
-                batch_size=batch_size,
-                drop_last=False
-            ),
+            batch_size=batch_size,
+            shuffle=False,
             collate_fn=collate_fn,
             num_workers=0
         )
