@@ -61,6 +61,7 @@ def train(
     data_path=None,
     # H5 dataset parameters  
     h5_sequence_data_path="data/preprocessed/sequence_data.h5",
+    h5_item_data_path="data/preprocessed/item_data.h5",
     h5_max_seq_len=200
 ):  
 
@@ -82,6 +83,7 @@ def train(
     # Create sequence datasets for training and evaluation
     train_dataset = H5SequenceDataset(
         sequence_data_path=h5_sequence_data_path,
+        item_data_path=h5_item_data_path,
         is_train=True,
         max_seq_len=h5_max_seq_len,
         subsample=train_data_subsample
@@ -89,6 +91,7 @@ def train(
     
     eval_dataset = H5SequenceDataset(
         sequence_data_path=h5_sequence_data_path,
+        item_data_path=h5_item_data_path,
         is_train=False, 
         max_seq_len=h5_max_seq_len,
         subsample=False
@@ -100,6 +103,7 @@ def train(
     # Create sequence dataloaders
     train_dataloader = create_h5_sequence_dataloader(
         sequence_data_path=h5_sequence_data_path,
+        item_data_path=h5_item_data_path,
         batch_size=batch_size,
         is_train=True,
         max_seq_len=h5_max_seq_len,
@@ -109,6 +113,7 @@ def train(
     
     eval_dataloader = create_h5_sequence_dataloader(
         sequence_data_path=h5_sequence_data_path,
+        item_data_path=h5_item_data_path,
         batch_size=batch_size,
         is_train=False,
         max_seq_len=h5_max_seq_len,

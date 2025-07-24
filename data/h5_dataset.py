@@ -231,6 +231,7 @@ class H5SequenceDataset:
     def __init__(
         self,
         sequence_data_path: str,
+        item_data_path: str,
         is_train: bool = True,
         max_seq_len: int = 200,
         test_ratio: float = 0.2,  # 保留参数以兼容现有代码，但实际上不使用
@@ -241,6 +242,7 @@ class H5SequenceDataset:
         
         Args:
             sequence_data_path: 序列数据H5文件路径
+            item_data_path: 物品数据H5文件路径 (包含item embeddings)
             is_train: 是否为训练集
             max_seq_len: 最大序列长度
             test_ratio: 测试集比例 (保留参数兼容性，但不使用)
@@ -249,16 +251,22 @@ class H5SequenceDataset:
         注意: 验证集通过每个序列的最后一个位置自动构建，不需要test_ratio分割
         """
         self.sequence_data_path = sequence_data_path
+        self.item_data_path = item_data_path
         self.is_train = is_train
         self.max_seq_len = max_seq_len
         self.test_ratio = test_ratio
         self.subsample = subsample
         
         # 验证文件存在
-        print(f"🔍 Checking file exists: {sequence_data_path}")
+        print(f"🔍 Checking sequence file exists: {sequence_data_path}")
         if not os.path.exists(sequence_data_path):
             raise FileNotFoundError(f"Sequence data file not found: {sequence_data_path}")
-        print("✅ File exists")
+        print("✅ Sequence file exists")
+        
+        print(f"🔍 Checking item data file exists: {item_data_path}")
+        if not os.path.exists(item_data_path):
+            raise FileNotFoundError(f"Item data file not found: {item_data_path}")
+        print("✅ Item data file exists")
             
         # 加载序列数据
         print("🔄 Starting _load_sequence_data()...")
@@ -293,48 +301,29 @@ class H5SequenceDataset:
             self.item_sequences = [seq.tolist() for seq in sequences_data]
             print(f"✅ Converted to list format")
             
-            # 加载物品embeddings和映射
-            print("🔄 Checking for item_embeddings...")
-            if 'item_embeddings' in f:
-                print("🔄 Loading item_embeddings...")
-                self.item_embeddings = f['item_embeddings'][:]
-                self.embedding_dim = self.item_embeddings.shape[1]
-                print(f"✅ Loaded item_embeddings: {self.item_embeddings.shape}")
-            else:
-                print("🔄 No pre-stored embeddings, creating from sequences...")
-                # 如果没有预存储的embeddings，从序列中推断并创建
-                all_items = set()
-                for seq in self.item_sequences:
-                    all_items.update(seq)
-                max_item_id = max(all_items) if all_items else 0
-                self.embedding_dim = 768  # 默认embedding维度
-                self.item_embeddings = np.random.randn(max_item_id + 1, self.embedding_dim).astype(np.float32)
-                print(f"✅ Created random embeddings: {self.item_embeddings.shape}")
+        # 从item_data.h5加载物品embeddings
+        print(f"🔄 Loading item embeddings from {self.item_data_path}...")
+        with h5py.File(self.item_data_path, 'r') as item_f:
+            self.item_ids = item_f['item_ids'][:]
+            self.item_embeddings = item_f['embeddings'][:]
+            self.embedding_dim = item_f.attrs['embedding_dim']
             
-            # 加载物品ID映射
-            print("🔄 Loading item_id_mapping...")
-            if 'item_id_mapping' in f:
-                # 从H5文件加载映射 (假设存储为字符串格式)
-                mapping_data = f['item_id_mapping'][:]
-                self.item_id_mapping = {int(k): int(v) for k, v in mapping_data}
-                print(f"✅ Loaded item_id_mapping: {len(self.item_id_mapping)} items")
-            else:
-                print("🔄 Creating 1:1 item mapping...")
-                # 创建简单的1:1映射
-                all_items = set()
-                for seq in self.item_sequences:
-                    all_items.update(seq)
-                self.item_id_mapping = {i: i for i in all_items}
-                print(f"✅ Created item_id_mapping: {len(self.item_id_mapping)} items")
+            print(f"✅ Loaded item_embeddings: {self.item_embeddings.shape}")
+            print(f"✅ Embedding dimension: {self.embedding_dim}")
             
-            # 加载元数据
-            print("🔄 Loading metadata...")
+            # 创建item_id到embedding index的映射
+            self.item_id_to_embedding_idx = {item_id: idx for idx, item_id in enumerate(self.item_ids)}
+            print(f"✅ Created item_id_to_embedding_idx mapping: {len(self.item_id_to_embedding_idx)} items")
+            
+        # 加载元数据
+        print("🔄 Loading metadata...")
+        with h5py.File(self.sequence_data_path, 'r') as f:
             if hasattr(f, 'attrs'):
-                self.n_items = f.attrs.get('n_items', len(self.item_id_mapping))
-                self.total_items = f.attrs.get('total_items', len(self.item_id_mapping))
-                print(f"✅ Loaded metadata from attrs: n_items={self.n_items}, total_items={self.total_items}")
+                self.n_items = f.attrs.get('total_items', len(self.item_id_to_embedding_idx))
+                self.total_items = f.attrs.get('total_items', len(self.item_id_to_embedding_idx))
+                print(f"✅ Loaded metadata from sequence file attrs: n_items={self.n_items}, total_items={self.total_items}")
             else:
-                self.n_items = len(self.item_id_mapping)
+                self.n_items = len(self.item_id_to_embedding_idx)
                 self.total_items = self.n_items
                 print(f"✅ Using default metadata: n_items={self.n_items}, total_items={self.total_items}")
             
@@ -367,11 +356,11 @@ class H5SequenceDataset:
     def _get_item_embedding(self, item_id: int) -> np.ndarray:
         """根据物品ID获取embedding。"""
         if item_id == -1:  # padding token
-            return np.full(self.embedding_dim, -1.0, dtype=np.float32)
+            return np.zeros(self.embedding_dim, dtype=np.float32)
         
         # 使用映射获取embedding索引
-        if item_id in self.item_id_mapping:
-            emb_idx = self.item_id_mapping[item_id]
+        if item_id in self.item_id_to_embedding_idx:
+            emb_idx = self.item_id_to_embedding_idx[item_id]
             return self.item_embeddings[emb_idx]
         else:
             # 未知物品，返回零向量
@@ -440,6 +429,7 @@ class H5SequenceDataset:
 
 def create_h5_sequence_dataloader(
     sequence_data_path: str,
+    item_data_path: str,
     batch_size: int = 64,
     is_train: bool = True,
     max_seq_len: int = 200,
@@ -454,6 +444,7 @@ def create_h5_sequence_dataloader(
     
     Args:
         sequence_data_path: 序列数据H5文件路径
+        item_data_path: 物品数据H5文件路径 (包含item embeddings)
         batch_size: 批次大小
         is_train: 是否为训练集
         max_seq_len: 最大序列长度
@@ -469,6 +460,7 @@ def create_h5_sequence_dataloader(
     print(f"🔄 Creating H5SequenceDataset...")
     dataset = H5SequenceDataset(
         sequence_data_path=sequence_data_path,
+        item_data_path=item_data_path,
         is_train=is_train,
         max_seq_len=max_seq_len,
         test_ratio=test_ratio,  # 传递但不使用
