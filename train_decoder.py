@@ -7,6 +7,7 @@ import swanlab
 from data.processed import ItemData
 from data.processed import RecDataset
 from data.processed import SeqData
+from data.h5_dataset import H5SequenceDataset, create_h5_sequence_dataloader
 from data.utils import batch_to
 from data.utils import cycle
 from data.utils import next_batch
@@ -57,7 +58,11 @@ def train(
     train_data_subsample=True,
     model_jagged_mode=True,
     vae_hf_model_name="edobotta/rqvae-amazon-beauty",
-    data_path=None
+    data_path=None,
+    # H5 dataset parameters  
+    h5_sequence_data_path="data/preprocessed/sequence_data.h5",
+    h5_test_ratio=0.2,
+    h5_max_seq_len=200
 ):  
 
     if swanlab_logging:
@@ -71,34 +76,51 @@ def train(
             config=params
         )
     
-    item_dataset = ItemData(
-        root=dataset_folder,
-        dataset=dataset,
-        force_process=force_dataset_process,
-        split=dataset_split,
-        data_path=data_path
+    # Use H5 sequence dataset for decoder training
+    print("Using H5 sequence dataset for decoder training")
+    
+    # Create sequence datasets for training and evaluation
+    train_dataset = H5SequenceDataset(
+        sequence_data_path=h5_sequence_data_path,
+        is_train=True,
+        max_seq_len=h5_max_seq_len,
+        test_ratio=h5_test_ratio,
+        subsample=train_data_subsample
     )
-    train_dataset = SeqData(
-        root=dataset_folder, 
-        dataset=dataset, 
-        is_train=True, 
-        subsample=train_data_subsample, 
-        split=dataset_split,
-        data_path=data_path
-    )
-    eval_dataset = SeqData(
-        root=dataset_folder, 
-        dataset=dataset, 
+    
+    eval_dataset = H5SequenceDataset(
+        sequence_data_path=h5_sequence_data_path,
         is_train=False, 
-        subsample=False, 
-        split=dataset_split,
-        data_path=data_path
+        max_seq_len=h5_max_seq_len,
+        test_ratio=h5_test_ratio,
+        subsample=False
     )
-
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    # For item_dataset, use train_dataset (compatible with existing code)
+    item_dataset = train_dataset
+    
+    # Create sequence dataloaders
+    train_dataloader = create_h5_sequence_dataloader(
+        sequence_data_path=h5_sequence_data_path,
+        batch_size=batch_size,
+        is_train=True,
+        max_seq_len=h5_max_seq_len,
+        test_ratio=h5_test_ratio,
+        subsample=train_data_subsample,
+        shuffle=True
+    )
+    
+    eval_dataloader = create_h5_sequence_dataloader(
+        sequence_data_path=h5_sequence_data_path,
+        batch_size=batch_size,
+        is_train=False,
+        max_seq_len=h5_max_seq_len,
+        test_ratio=h5_test_ratio,
+        subsample=False,
+        shuffle=True
+    )
     
     train_dataloader = cycle(train_dataloader)
-    eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
     
 
     tokenizer = SemanticIdTokenizer(
