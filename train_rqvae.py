@@ -221,22 +221,37 @@ def train(
                 }
 
             if do_eval and ((iter+1) % eval_every == 0 or iter+1 == iterations):
+                print(f"[DEBUG] Starting evaluation at iteration {iter+1}")
+                print(f"[DEBUG] Switching model to eval mode")
                 model.eval()
+                print(f"[DEBUG] Creating eval dataloader tqdm, eval_dataset size: {len(eval_dataset)}")
                 with tqdm(eval_dataloader, desc=f'Eval {iter+1}', disable=True) as pbar_eval:
                     eval_losses = [[], [], []]
+                    print(f"[DEBUG] Starting batch iteration over eval_dataloader")
+                    batch_count = 0
                     for batch in pbar_eval:
+                        batch_count += 1
+                        if batch_count % 10 == 1:  # Print every 10 batches
+                            print(f"[DEBUG] Processing eval batch {batch_count}")
                         data = batch_to(batch, device)
                         with paddle.no_grad():
+                            if batch_count % 10 == 1:
+                                print(f"[DEBUG] Running model inference for batch {batch_count}")
                             eval_model_output = model(data, gumbel_t=t)
+                            if batch_count % 10 == 1:
+                                print(f"[DEBUG] Model inference completed for batch {batch_count}")
 
                         eval_losses[0].append(eval_model_output.loss.item())
                         eval_losses[1].append(eval_model_output.reconstruction_loss.item())
                         eval_losses[2].append(eval_model_output.rqvae_loss.item())
                     
+                    print(f"[DEBUG] Completed all eval batches, total batches processed: {batch_count}")
                     eval_losses = np.array(eval_losses).mean(axis=-1)
+                    print(f"[DEBUG] Computed eval losses: total={eval_losses[0]:.4f}, recon={eval_losses[1]:.4f}, rqvae={eval_losses[2]:.4f}")
                     id_diversity_log["eval_total_loss"] = eval_losses[0]
                     id_diversity_log["eval_reconstruction_loss"] = eval_losses[1]
                     id_diversity_log["eval_rqvae_loss"] = eval_losses[2]
+                    print(f"[DEBUG] Evaluation phase completed")
                     
             if (iter+1) % save_model_every == 0 or iter+1 == iterations:
                 state = {
@@ -252,30 +267,49 @@ def train(
                 paddle.save(state, save_dir_root + f"checkpoint_{iter}.pdparams")
                 
             if (iter+1) % eval_every == 0 or iter+1 == iterations:
+                print(f"[DEBUG] Starting tokenizer operations at iteration {iter+1}")
                 tokenizer.reset()
+                print(f"[DEBUG] Tokenizer reset completed")
                 model.eval()
-
+                print(f"[DEBUG] Starting precompute_corpus_ids, index_dataset size: {len(index_dataset)}")
                 corpus_ids = tokenizer.precompute_corpus_ids(index_dataset)
+                print(f"[DEBUG] Precompute_corpus_ids completed, corpus_ids shape: {corpus_ids.shape}")
+                print(f"[DEBUG] Computing max_duplicates")
                 max_duplicates = corpus_ids[:,-1].max() / corpus_ids.shape[0]
+                print(f"[DEBUG] Max_duplicates computed: {max_duplicates.item():.4f}")
                 
+                print(f"[DEBUG] Computing RQVAE entropy")
                 _, counts = paddle.unique(corpus_ids[:,:-1], axis=0, return_counts=True)
                 p = counts / corpus_ids.shape[0]
                 rqvae_entropy = -(p*paddle.log(p)).sum()
+                print(f"[DEBUG] RQVAE entropy computed: {rqvae_entropy.item():.4f}")
 
+                print(f"[DEBUG] Computing codebook usage for {vae_n_layers} layers")
                 for cid in range(vae_n_layers):
+                    print(f"[DEBUG] Computing codebook usage for layer {cid}")
                     _, counts = paddle.unique(corpus_ids[:,cid], return_counts=True)
-                    id_diversity_log[f"codebook_usage_{cid}"] = len(counts) / vae_codebook_size
+                    usage = len(counts) / vae_codebook_size
+                    id_diversity_log[f"codebook_usage_{cid}"] = usage
+                    print(f"[DEBUG] Layer {cid} codebook usage: {usage:.4f}")
 
+                print(f"[DEBUG] Preparing id_diversity_log for logging")
                 id_diversity_log["rqvae_entropy"] = rqvae_entropy.item()
                 id_diversity_log["max_id_duplicates"] = max_duplicates.item()
+                print(f"[DEBUG] Id_diversity_log prepared with {len(id_diversity_log)} entries")
             
             if swanlab_logging:
-                swanlab.log({
+                print(f"[DEBUG] Starting swanlab logging at iteration {iter+1}")
+                log_data = {
                     **train_log,
                     **id_diversity_log
-                })
+                }
+                print(f"[DEBUG] Prepared log data with {len(log_data)} entries")
+                swanlab.log(log_data)
+                print(f"[DEBUG] Swanlab logging completed successfully")
 
+            print(f"[DEBUG] Updating progress bar for iteration {iter+1}")
             pbar.update(1)
+            print(f"[DEBUG] Iteration {iter+1} completed successfully")
     
     if swanlab_logging:
         swanlab.finish()
