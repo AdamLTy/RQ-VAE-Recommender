@@ -93,8 +93,9 @@ class SemanticIdTokenizer(nn.Layer):
                 seq_mask = paddle.concat([item.seq_mask for item in batch], axis=0)
                 return SeqBatch(user_ids=user_ids, ids=ids, ids_fut=ids_fut, x=x, x_fut=x_fut, seq_mask=seq_mask)
             else:
-                # Default behavior for other datasets
-                return batch
+                # For other datasets, assume batch contains SeqBatch objects and return first one
+                # since we're processing items individually in precompute_corpus_ids
+                return batch[0] if batch else None
         
         dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False, collate_fn=collate_fn)
         print(f"[DEBUG] precompute_corpus_ids: Created dataloader with batch_size=512")
