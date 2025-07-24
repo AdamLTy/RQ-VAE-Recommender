@@ -170,12 +170,12 @@ class MultiHeadAttention(nn.Module):
         self.enable_kv_cache = enable_kv_cache
 
         if self.cross_attn:
-            self.q = nn.Linear(d_in, d_out, bias=qkv_bias)
-            self.kv = nn.Linear(d_in, 2 * d_out, bias=qkv_bias)
+            self.q = nn.Linear(d_in, d_out, bias_attr=qkv_bias)
+            self.kv = nn.Linear(d_in, 2 * d_out, bias_attr=qkv_bias)
         else:
-            self.qkv = nn.Linear(d_in, 3 * d_out, bias=qkv_bias)
+            self.qkv = nn.Linear(d_in, 3 * d_out, bias_attr=qkv_bias)
     
-        self.proj = nn.Linear(d_out, d_out, bias=False)
+        self.proj = nn.Linear(d_out, d_out, bias_attr=False)
 
         self.attend = Attend(self.d_out, self.num_heads, self.head_dim, dropout=False)
 

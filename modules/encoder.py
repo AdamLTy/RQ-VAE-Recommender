@@ -24,7 +24,7 @@ class MLP(nn.Layer):
         
         self.mlp = nn.Sequential()
         for i, (in_d, out_d) in enumerate(zip(dims[:-1], dims[1:])):
-            self.mlp.append(nn.Linear(in_d, out_d, bias=False))
+            self.mlp.append(nn.Linear(in_d, out_d, bias_attr=False))
             if i != len(dims)-2:
                 self.mlp.append(nn.Silu())
                 if dropout != 0:

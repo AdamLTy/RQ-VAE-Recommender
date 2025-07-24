@@ -68,7 +68,7 @@ class Quantize(nn.Layer):
         self.kmeans_initted = False
 
         self.out_proj = nn.Sequential(
-            nn.Linear(embed_dim, embed_dim, bias=False) if sim_vq else nn.Identity(),
+            nn.Linear(embed_dim, embed_dim, bias_attr=False) if sim_vq else nn.Identity(),
             L2NormalizationLayer(dim=-1) if codebook_normalize else nn.Identity()
         )
 
