@@ -33,7 +33,8 @@ def eval_mode(fn):
         was_training = self.training
         self.eval()
         out = fn(self, *args, **kwargs)
-        self.train(was_training)
+        if was_training:
+            self.train()
         return out
 
     return inner

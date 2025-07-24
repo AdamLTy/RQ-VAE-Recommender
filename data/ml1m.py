@@ -60,12 +60,12 @@ class RawMovieLens1M(MovieLens1M, PreprocessingMixin):
         movie_mapping = {idx: i for i, idx in enumerate(df.index)}
 
         genres = self._process_genres(df["genres"].str.get_dummies('|').values, one_hot=True)
-        genres = torch.from_numpy(genres).to(torch.float)
+        genres = paddle.to_tensor(genres, dtype=paddle.float32)
 
         titles_text = df["title"].apply(lambda s: s.split("(")[0].strip()).tolist()
         titles_emb = self._encode_text_feature(titles_text)
 
-        x = torch.cat([titles_emb, genres], axis=1)
+        x = paddle.concat([titles_emb, genres], axis=1)
 
         data['item'].x = x
         # Process user data:
