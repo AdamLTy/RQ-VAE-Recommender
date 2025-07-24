@@ -157,15 +157,15 @@ def train(
         jagged_mode=model_jagged_mode
     )
 
+    lr_scheduler = InverseSquareRootScheduler(
+        learning_rate=learning_rate,
+        warmup_steps=10000
+    )
+    
     optimizer = AdamW(
         parameters=model.parameters(),
-        learning_rate=learning_rate,
+        learning_rate=lr_scheduler,
         weight_decay=weight_decay
-    )
-
-    lr_scheduler = InverseSquareRootScheduler(
-        optimizer=optimizer,
-        warmup_steps=10000
     )
     
     start_iter = 0
