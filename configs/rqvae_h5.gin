@@ -15,7 +15,7 @@ train.vae_sim_vq=False
 train.save_model_every=5000
 train.eval_every=5000
 # H5 dataset path configuration
-train.h5_item_data_path="data/preprocessed/item_data.h5"
+train.h5_item_data_path="/datadisk/data/item_data.h5"
 train.save_dir_root="out/rqvae/h5/"
 train.swanlab_logging=True
 train.commitment_weight=0.25
