@@ -4,7 +4,6 @@ import gin
 import paddle
 import swanlab
 
-from accelerate import Accelerator
 from data.processed import ItemData
 from data.processed import RecDataset
 from data.processed import SeqData
@@ -34,11 +33,8 @@ def train(
     dataset=RecDataset.ML_1M,
     pretrained_rqvae_path=None,
     pretrained_decoder_path=None,
-    split_batches=True,
-    amp=False,
     swanlab_logging=False,
     force_dataset_process=False,
-    mixed_precision_type="fp16",
     gradient_accumulate_every=1,
     save_model_every=1000000,
     partial_eval_every=1000,
@@ -67,14 +63,9 @@ def train(
     if swanlab_logging:
         params = locals()
 
-    accelerator = Accelerator(
-        split_batches=split_batches,
-        mixed_precision=mixed_precision_type if amp else 'no'
-    )
+    device = paddle.device("gpu" if paddle.device.is_compiled_with_cuda() else "cpu")
 
-    device = accelerator.device
-
-    if swanlab_logging and accelerator.is_main_process:
+    if swanlab_logging:
         run = swanlab.init(
             project="gen-retrieval-decoder-training",
             config=params
@@ -109,9 +100,6 @@ def train(
     train_dataloader = cycle(train_dataloader)
     eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True)
     
-    train_dataloader, eval_dataloader = accelerator.prepare(
-        train_dataloader, eval_dataloader
-    )
 
     tokenizer = SemanticIdTokenizer(
         input_dim=vae_input_dim,
@@ -124,7 +112,6 @@ def train(
         rqvae_codebook_normalize=vae_codebook_normalize,
         rqvae_sim_vq=vae_sim_vq
     )
-    tokenizer = accelerator.prepare(tokenizer)
     tokenizer.precompute_corpus_ids(item_dataset)
     
     if push_vae_to_hf:
@@ -164,15 +151,12 @@ def train(
             lr_scheduler.load_state_dict(checkpoint["scheduler"])
         start_iter = checkpoint["iter"] + 1
 
-    model, optimizer, lr_scheduler = accelerator.prepare(
-        model, optimizer, lr_scheduler
-    )
 
     metrics_accumulator = TopKAccumulator(ks=[1, 5, 10])
     num_params = sum(p.numel() for p in model.parameters())
     print(f"Device: {device}, Num Parameters: {num_params}")
     with tqdm(initial=start_iter, total=start_iter + iterations,
-              disable=not accelerator.is_main_process) as pbar:
+              disable=False) as pbar:
         for iter in range(iterations):
             model.train()
             total_loss = 0
@@ -181,25 +165,20 @@ def train(
                 data = next_batch(train_dataloader, device)
                 tokenized_data = tokenizer(data)
 
-                with accelerator.autocast():
-                    model_output = model(tokenized_data)
-                    loss = model_output.loss / gradient_accumulate_every
-                    total_loss += loss
+                model_output = model(tokenized_data)
+                loss = model_output.loss / gradient_accumulate_every
+                total_loss += loss
                 
-                if swanlab_logging and accelerator.is_main_process:
+                if swanlab_logging:
                     train_debug_metrics = compute_debug_metrics(tokenized_data, model_output)
 
-                accelerator.backward(total_loss)
+                total_loss.backward()
                 assert model.sem_id_embedder.emb.weight.grad is not None
 
             pbar.set_description(f'loss: {total_loss.item():.4f}')
 
-            accelerator.wait_for_everyone()
-
             optimizer.step()
             lr_scheduler.step()
-
-            accelerator.wait_for_everyone()
 
             if (iter+1) % partial_eval_every == 0:
                 model.eval()
@@ -211,7 +190,7 @@ def train(
                     with paddle.no_grad():
                         model_output_eval = model(tokenized_data)
 
-                    if swanlab_logging and accelerator.is_main_process:
+                    if swanlab_logging:
                         eval_debug_metrics = compute_debug_metrics(tokenized_data, model_output_eval, "eval")
                         eval_debug_metrics["eval_loss"] = model_output_eval.loss.detach().cpu().item()
                         swanlab.log(eval_debug_metrics)
@@ -219,7 +198,7 @@ def train(
             if (iter+1) % full_eval_every == 0:
                 model.eval()
                 model.enable_generation = True
-                with tqdm(eval_dataloader, desc=f'Eval {iter+1}', disable=not accelerator.is_main_process) as pbar_eval:
+                with tqdm(eval_dataloader, desc=f'Eval {iter+1}', disable=False) as pbar_eval:
                     for batch in pbar_eval:
                         data = batch_to(batch, device)
                         tokenized_data = tokenizer(data)
@@ -229,18 +208,18 @@ def train(
 
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)
 
-                        if accelerator.is_main_process and swanlab_logging:
+                        if swanlab_logging:
                             swanlab.log(eval_debug_metrics)
                 
                 eval_metrics = metrics_accumulator.reduce()
                 
                 print(eval_metrics)
-                if accelerator.is_main_process and swanlab_logging:
+                if swanlab_logging:
                     swanlab.log(eval_metrics)
                 
                 metrics_accumulator.reset()
 
-            if accelerator.is_main_process:
+            if True:
                 if (iter+1) % save_model_every == 0 or iter+1 == iterations:
                     state = {
                         "iter": iter,
