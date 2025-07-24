@@ -156,7 +156,7 @@ def train(
     )
 
     optimizer = AdamW(
-        params=model.parameters(),
+        model.parameters(),
         lr=learning_rate,
         weight_decay=weight_decay
     )
