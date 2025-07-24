@@ -104,8 +104,8 @@ class Quantize(nn.Layer):
         codebook = self.out_proj(self.embedding.weight)
         
         if self.distance_mode == QuantizeDistance.L2:
-            x_squared = paddle.sum(x**2, axis=1, keepdim=True)
-            codebook_squared = paddle.sum(codebook.T**2, axis=0, keepdim=True)
+            x_squared = paddle.sum(x**2, axis=-1, keepdim=True)
+            codebook_squared = paddle.sum(codebook**2, axis=-1, keepdim=True).T
             cross_term = 2 * paddle.matmul(x, codebook.T)
             dist = paddle.add(paddle.add(x_squared, codebook_squared), -cross_term)
         elif self.distance_mode == QuantizeDistance.COSINE:
