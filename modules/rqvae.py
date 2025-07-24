@@ -141,7 +141,7 @@ class RqVae(nn.Layer):
         x = batch.x
         quantized = self.get_semantic_ids(x, gumbel_t)
         embs, residuals = quantized.embeddings, quantized.residuals
-        x_hat = self.decode(embs.sum(axis=-1))
+        x_hat = self.decode(embs.sum(axis=0))
         x_hat = paddle.concat([l2norm(x_hat[...,:-self.n_cat_feats]), x_hat[...,-self.n_cat_feats:]], axis=-1)
 
         reconstuction_loss = self.reconstruction_loss(x_hat, x)
