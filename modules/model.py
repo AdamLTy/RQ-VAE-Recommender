@@ -162,7 +162,8 @@ class EncoderDecoderRetrievalModel(nn.Layer):
         assert self.enable_generation, "Model generation is not enabled"
 
         B, N = batch.sem_ids.shape
-        generated, log_probas = None, 0
+        generated = None
+        log_probas = paddle.zeros([B, 1], dtype='float32')
         k = 32 if top_k else 1
         n_top_k_candidates = 200 if top_k else 1
 
