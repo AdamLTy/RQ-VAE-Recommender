@@ -234,8 +234,23 @@ class MultiHeadAttention(nn.Layer):
             context_vec = self.attend.jagged_forward(queries, keys, values, is_causal=is_causal)
 
         if not jagged:
-            raise Exception("Unjagged attention currently not supported.")
-            # context_vec = self.attend(qkv, is_causal=is_causal)
+            if self.cross_attn:
+                # For cross attention, we need to handle queries, keys, values separately
+                # Reshape for regular attention
+                batch_size, num_tokens, embed_dim = queries.shape
+                queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
+                keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
+                values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
+                
+                dropout_p = 0. if not self.training else 0.0  # No dropout specified in constructor
+                context_vec = paddle.nn.functional.scaled_dot_product_attention(
+                    queries, keys, values, attn_mask=padding_mask, dropout_p=dropout_p, is_causal=is_causal)
+                
+                context_vec = context_vec.transpose([0, 2, 1, 3]).flatten(-2)
+            else:
+                # For self-attention, combine q, k, v into single tensor
+                qkv = paddle.concat([queries, keys, values], axis=-1)
+                context_vec = self.attend(qkv, is_causal=is_causal)
     
         context_vec = self.proj(context_vec)
         return context_vec
