@@ -255,12 +255,14 @@ class SemanticIdTokenizer(nn.Layer):
             # Generate semantic IDs for future items
             if hasattr(batch, 'x_fut') and batch.x_fut is not None:
                 sem_ids_fut = self.rq_vae.get_semantic_ids(batch.x_fut).sem_ids
+                # Use the actual batch size from sem_ids_fut, not from batch.ids
+                B_fut = sem_ids_fut.shape[0]
                 if batch.ids.ndim == 1:
-                    # For item-level data, sem_ids_fut should be [B, D]
-                    sem_ids_fut = sem_ids_fut.reshape([B, D])
+                    # For item-level data, sem_ids_fut should be [B_fut, D]
+                    sem_ids_fut = sem_ids_fut.reshape([B_fut, D])
                 else:
-                    # For sequence data, sem_ids_fut should be [B, D] (single future item)
-                    sem_ids_fut = sem_ids_fut.reshape([B, D])
+                    # For sequence data, sem_ids_fut should be [B_fut, D] (single future item)
+                    sem_ids_fut = sem_ids_fut.reshape([B_fut, D])
             else:
                 sem_ids_fut = None
         else:
