@@ -208,6 +208,9 @@ class MultiHeadAttention(nn.Layer):
         if self.cross_attn:
             queries = self.q(x)
             keys, values = self.kv(x_kv).chunk(2, axis=-1)
+            # Debug: print tensor shapes for cross-attention
+            print(f"Cross-attention shapes - queries: {queries.shape}, keys: {keys.shape}, values: {values.shape}")
+            print(f"Cross-attention - num_heads: {self.num_heads}, head_dim: {self.head_dim}")
         else:
             queries, keys, values = self.qkv(x).chunk(3, axis=-1)
         
@@ -245,8 +248,11 @@ class MultiHeadAttention(nn.Layer):
                 
                 # For cross-attention, keys and values should use the same number of heads as queries
                 # since kv projection outputs 2 * d_out, we split it evenly for keys and values
+                print(f"Before unflatten - keys.shape[-1]: {keys.shape[-1]}, expected: {self.num_heads * self.head_dim}")
+                print(f"Before unflatten - values.shape[-1]: {values.shape[-1]}, expected: {self.num_heads * self.head_dim}")
                 keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
+                print(f"After unflatten - queries: {queries.shape}, keys: {keys.shape}, values: {values.shape}")
                 
                 dropout_p = 0. if not self.training else 0.0  # No dropout specified in constructor
                 
