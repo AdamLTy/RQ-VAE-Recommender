@@ -204,9 +204,9 @@ class MultiHeadAttention(nn.Layer):
         
         if self.cross_attn:
             queries = self.q(x)
-            keys, values = self.kv(x_kv).chunk(2, dim=-1)
+            keys, values = self.kv(x_kv).chunk(2, axis=-1)
         else:
-            queries, keys, values = self.qkv(x).chunk(3, dim=-1)
+            queries, keys, values = self.qkv(x).chunk(3, axis=-1)
         
         if not self.training and use_cache and self.enable_kv_cache and self.kv_cache.is_empty:
             assert padding_mask is not None
