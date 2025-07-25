@@ -108,7 +108,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
         wpe = self.wpe(pos)
 
         input_embedding = paddle.concat([user_emb, paddle.add(wpe, sem_ids_emb)], axis=1)
-        input_embedding_fut = self.bos_emb.repeat(B, 1, 1)
+        input_embedding_fut = self.bos_emb.tile([B, 1, 1])
         if sem_ids_emb_fut is not None:
             tte_fut = self.tte(batch.token_type_ids_fut)
             input_embedding_fut = paddle.concat([
