@@ -188,9 +188,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 is_valid_prefix = self.inference_verifier_fn(prefix).reshape([B, -1])
             
             # Create batch indices for gather operation
-            batch_indices = paddle.arange(B).unsqueeze(1).tile([1, n_top_k_candidates])
+            batch_indices = paddle.arange(B).unsqueeze(1).tile([1, n_top_k_candidates]).reshape([-1])
             # Use gather_nd for 2D indexing
-            indices = paddle.stack([batch_indices, samples_batched], axis=-1)
+            indices = paddle.stack([batch_indices, samples_batched.reshape([-1])], axis=-1)
             sampled_log_probas = paddle.log(paddle.gather_nd(probas_batched, indices)).reshape([B, -1])
             samples = samples_batched.reshape([B, -1])
 
