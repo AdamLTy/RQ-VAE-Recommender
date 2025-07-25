@@ -241,9 +241,9 @@ class MultiHeadAttention(nn.Layer):
                 # For cross attention, we need to handle queries, keys, values separately
                 # Reshape for regular attention
                 batch_size, num_tokens, embed_dim = queries.shape
-                queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
-                keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
-                values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose(1, 2)
+                queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
+                keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
+                values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 
                 dropout_p = 0. if not self.training else 0.0  # No dropout specified in constructor
                 context_vec = paddle.nn.functional.scaled_dot_product_attention(
