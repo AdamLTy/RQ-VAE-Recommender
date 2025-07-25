@@ -130,10 +130,25 @@ class RqVae(nn.Layer):
             sem_ids.append(id)
             embs.append(emb)
 
+        # Handle both 2D and 3D tensor cases
+        if len(embs[0].shape) == 3:  # [batch_size, seq_len, embed_dim]
+            # Flatten sequence dimension for stacking
+            embs_flat = [emb.reshape([-1, emb.shape[-1]]) for emb in embs]
+            residuals_flat = [res.reshape([-1, res.shape[-1]]) for res in residuals]
+            sem_ids_flat = [id.reshape([-1]) for id in sem_ids]
+            
+            embeddings = rearrange(paddle.stack(embs_flat), "h b d -> h d b")
+            residuals = rearrange(paddle.stack(residuals_flat), "h b d -> h d b")
+            sem_ids = rearrange(paddle.stack(sem_ids_flat), "h b -> b h")
+        else:  # [batch_size, embed_dim]
+            embeddings = rearrange(paddle.stack(embs), "h b d -> h d b")
+            residuals = rearrange(paddle.stack(residuals), "h b d -> h d b")
+            sem_ids = rearrange(paddle.stack(sem_ids), "h b -> b h")
+            
         return RqVaeOutput(
-            embeddings=rearrange(paddle.stack(embs), "h b d -> h d b"),
-            residuals=rearrange(paddle.stack(residuals), "h b d -> h d b"),
-            sem_ids=rearrange(paddle.stack(sem_ids), "h b -> b h"),
+            embeddings=embeddings,
+            residuals=residuals,
+            sem_ids=sem_ids,
             quantize_loss=quantize_loss
         )
 
