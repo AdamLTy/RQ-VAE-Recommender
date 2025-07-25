@@ -230,7 +230,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 log_probas = top_k_log_probas.detach()
                 log_probas = log_probas.clone()
             else:
-                next_sem_ids = top_k_samples.reshape(-1, 1)
+                next_sem_ids = top_k_samples.reshape([-1, 1])
 
                 # Explode encoder cache on dim 0 to match input size B*k
                 # TODO: Figure out how to avoid jagged - padded conversions 
