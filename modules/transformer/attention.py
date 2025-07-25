@@ -252,6 +252,15 @@ class MultiHeadAttention(nn.Layer):
                     elif batch_size == 1 and kv_batch_size > 1:
                         queries = queries.expand([kv_batch_size, num_tokens, embed_dim])
                         batch_size = kv_batch_size
+                    # Handle general case: expand smaller batch to match larger batch
+                    elif batch_size > kv_batch_size:
+                        # If keys/values batch is smaller, expand to match queries
+                        keys = keys.expand([batch_size, kv_num_tokens, kv_embed_dim])
+                        values = values.expand([batch_size, kv_num_tokens, kv_embed_dim])
+                    elif kv_batch_size > batch_size:
+                        # If queries batch is smaller, expand to match keys/values
+                        queries = queries.expand([kv_batch_size, num_tokens, embed_dim])
+                        batch_size = kv_batch_size
                     else:
                         raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}")
                 
