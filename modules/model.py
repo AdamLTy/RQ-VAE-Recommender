@@ -256,7 +256,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 parent_indices = (top_k_indices // n_top_k_candidates).unsqueeze(2)
                 parent_indices = parent_indices.tile([1, 1, i])
                 batch_idx_parent = paddle.arange(B).unsqueeze(1).unsqueeze(2).tile([1, k, i])
-                parent_id = generated[batch_idx_parent, parent_indices]
+                parent_id = generated[batch_idx_parent, parent_indices].squeeze(-1)
                 top_k_samples = paddle.concat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
 
                 next_sem_ids = top_k_samples.reshape([-1, top_k_samples.shape[-1]])
