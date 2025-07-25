@@ -148,7 +148,7 @@ class Attend(nn.Layer):
             queries, keys, values, attn_mask=None, dropout_p=use_dropout, is_causal=is_causal)
 
         # Combine heads, where self.d_out = self.num_heads * self.head_dim
-        context_vec = context_vec.transpose(1, 2).contiguous().view(batch_size, num_tokens, self.d_out)
+        context_vec = context_vec.transpose([1, 2]).contiguous().view(batch_size, num_tokens, self.d_out)
         return context_vec
 
 
