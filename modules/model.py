@@ -118,11 +118,19 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             )
 
         if self.jagged_mode:
-            input_embedding = padded_to_jagged_tensor(input_embedding, lengths=seq_lengths+1, max_len=input_embedding.shape[1])
+            try:
+                input_embedding = padded_to_jagged_tensor(input_embedding, lengths=seq_lengths+1, max_len=input_embedding.shape[1])
 
-            seq_lengths_fut = paddle.to_tensor(input_embedding_fut.shape[1], dtype='int64').tile([B])
-            input_embedding_fut = padded_to_jagged_tensor(input_embedding_fut, lengths=seq_lengths_fut, max_len=input_embedding_fut.shape[1])
-        else:
+                seq_lengths_fut = paddle.to_tensor(input_embedding_fut.shape[1], dtype='int64').tile([B])
+                input_embedding_fut = padded_to_jagged_tensor(input_embedding_fut, lengths=seq_lengths_fut, max_len=input_embedding_fut.shape[1])
+            except RuntimeError as e:
+                if "active drivers" in str(e):
+                    print("Warning: Triton/CUDA not available, falling back to non-jagged mode")
+                    self.jagged_mode = False
+                else:
+                    raise e
+        
+        if not self.jagged_mode:
             mem_mask = paddle.concat([
                 paddle.ones([B, 1], dtype='bool'),
                 batch.seq_mask
@@ -215,20 +223,27 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 # TODO: Figure out how to avoid jagged - padded conversions 
                 # (E.g. Implement repeat_interleave jagged kernel)
                 if self.jagged_mode:
-                    cache = paddle.zeros([input_batch.sem_ids.shape[0], input_batch.sem_ids.shape[1]+1, self.attn_dim])
-                    cache_mask = paddle.concat([paddle.ones([input_batch.sem_ids.shape[0], 1], dtype='bool'), input_batch.seq_mask], axis=1)
-                    cache[cache_mask] = self.transformer.cached_enc_output.values()
-                    lengths = self.transformer.cached_enc_output.offsets().diff().repeat_interleave(k)
-                    cache = cache.repeat_interleave(k, dim=0)
-                    self.transformer.cached_enc_output = padded_to_jagged_tensor(cache, lengths, max_len=cache.shape[1])
+                    try:
+                        cache = paddle.zeros([input_batch.sem_ids.shape[0], input_batch.sem_ids.shape[1]+1, self.attn_dim])
+                        cache_mask = paddle.concat([paddle.ones([input_batch.sem_ids.shape[0], 1], dtype='bool'), input_batch.seq_mask], axis=1)
+                        cache[cache_mask] = self.transformer.cached_enc_output.values()
+                        lengths = maybe_repeat_interleave(self.transformer.cached_enc_output.offsets().diff(), k, dim=0)
+                        cache = maybe_repeat_interleave(cache, k, dim=0)
+                        self.transformer.cached_enc_output = padded_to_jagged_tensor(cache, lengths, max_len=cache.shape[1])
+                    except RuntimeError as e:
+                        if "active drivers" in str(e):
+                            print("Warning: Triton/CUDA not available during beam search, falling back to non-jagged mode")
+                            self.jagged_mode = False
+                        else:
+                            raise e
 
                 input_batch = TokenizedSeqBatch(
-                    user_ids=input_batch.user_ids.repeat_interleave(k, dim=0),
-                    sem_ids=input_batch.sem_ids.repeat_interleave(k, dim=0),
+                    user_ids=maybe_repeat_interleave(input_batch.user_ids, k, dim=0),
+                    sem_ids=maybe_repeat_interleave(input_batch.sem_ids, k, dim=0),
                     sem_ids_fut=next_sem_ids,
                     token_type_ids_fut=paddle.zeros_like(next_sem_ids),
-                    seq_mask=input_batch.seq_mask.repeat_interleave(k, dim=0),
-                    token_type_ids=input_batch.token_type_ids.repeat_interleave(k, dim=0)
+                    seq_mask=maybe_repeat_interleave(input_batch.seq_mask, k, dim=0),
+                    token_type_ids=maybe_repeat_interleave(input_batch.token_type_ids, k, dim=0)
                 )
 
                 generated = top_k_samples.unsqueeze(-1)

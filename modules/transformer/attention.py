@@ -84,9 +84,15 @@ class KVCache(nn.Layer):
     
     @paddle.no_grad()
     def as_jagged(self):
-        keys_jagged = padded_to_jagged_tensor(self.keys, lengths=self.seq_lengths.squeeze(), max_len=self.keys.shape[1])
-        values_jagged = padded_to_jagged_tensor(self.values, lengths=self.seq_lengths.squeeze(), max_len=self.values.shape[1])
-        return keys_jagged, values_jagged
+        try:
+            keys_jagged = padded_to_jagged_tensor(self.keys, lengths=self.seq_lengths.squeeze(), max_len=self.keys.shape[1])
+            values_jagged = padded_to_jagged_tensor(self.values, lengths=self.seq_lengths.squeeze(), max_len=self.values.shape[1])
+            return keys_jagged, values_jagged
+        except RuntimeError as e:
+            if "active drivers" in str(e):
+                raise RuntimeError("Triton/CUDA not available. Cannot use jagged tensors. Set jagged_mode=False in config.")
+            else:
+                raise e
 
     @paddle.no_grad()
     def apply(self, fn) -> None:

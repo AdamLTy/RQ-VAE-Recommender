@@ -53,7 +53,11 @@ def select_columns_per_row(x: Tensor, indices: Tensor) -> paddle.Tensor:
 def maybe_repeat_interleave(x, repeats, dim):
     if not isinstance(x, Tensor):
         return x
-    return x.repeat_interleave(repeats, dim=dim)
+    # PaddlePaddle equivalent of repeat_interleave
+    shape = list(x.shape)
+    shape[dim] = shape[dim] * repeats
+    indices = paddle.arange(x.shape[dim]).unsqueeze(1).tile([1, repeats]).flatten()
+    return paddle.index_select(x, indices, axis=dim)
 
 
 def parse_config():
