@@ -244,25 +244,32 @@ class MultiHeadAttention(nn.Layer):
                 
                 # Ensure batch dimensions match for cross-attention
                 if batch_size != kv_batch_size:
-                    # If keys/values have smaller batch size, expand to match queries
+                    # Only allow broadcasting when one dimension is 1
                     if kv_batch_size == 1 and batch_size > 1:
                         keys = keys.expand([batch_size, kv_num_tokens, kv_embed_dim])
                         values = values.expand([batch_size, kv_num_tokens, kv_embed_dim])
-                    # If queries have smaller batch size, expand to match keys/values
                     elif batch_size == 1 and kv_batch_size > 1:
                         queries = queries.expand([kv_batch_size, num_tokens, embed_dim])
                         batch_size = kv_batch_size
-                    # Handle general case: expand smaller batch to match larger batch
-                    elif batch_size > kv_batch_size:
-                        # If keys/values batch is smaller, expand to match queries
-                        keys = keys.expand([batch_size, kv_num_tokens, kv_embed_dim])
-                        values = values.expand([batch_size, kv_num_tokens, kv_embed_dim])
-                    elif kv_batch_size > batch_size:
-                        # If queries batch is smaller, expand to match keys/values
-                        queries = queries.expand([kv_batch_size, num_tokens, embed_dim])
-                        batch_size = kv_batch_size
                     else:
-                        raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}")
+                        # For incompatible batch sizes that can't be broadcast, use repeat instead of expand
+                        if batch_size > kv_batch_size:
+                            # Check if batch_size is a multiple of kv_batch_size
+                            if batch_size % kv_batch_size == 0:
+                                repeat_factor = batch_size // kv_batch_size
+                                keys = keys.tile([repeat_factor, 1, 1])
+                                values = values.tile([repeat_factor, 1, 1])
+                            else:
+                                raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}. Cannot broadcast or tile.")
+                        elif kv_batch_size > batch_size:
+                            if kv_batch_size % batch_size == 0:
+                                repeat_factor = kv_batch_size // batch_size
+                                queries = queries.tile([repeat_factor, 1, 1])
+                                batch_size = kv_batch_size
+                            else:
+                                raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}. Cannot broadcast or tile.")
+                        else:
+                            raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}")
                 
                 queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 
