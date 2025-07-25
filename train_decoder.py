@@ -311,7 +311,7 @@ def train(
                 
                 if swanlab_logging:
                     swanlab.log({
-                        "learning_rate": optimizer.param_groups[0]["lr"],
+                        "learning_rate": optimizer.get_lr(),
                         "total_loss": total_loss.cpu().item(),
                         **train_debug_metrics
                     })
