@@ -204,12 +204,14 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             sorted_indices = paddle.argsort(combined_scores, axis=-1, descending=True)
 
             top_k_log_probas, top_k_indices = sorted_log_probas[:, :k], sorted_indices[:, :k]
-            top_k_samples = paddle.gather(samples, top_k_indices, axis=1)
+            batch_idx = paddle.arange(B).unsqueeze(1).tile([1, k])
+            top_k_samples = samples[batch_idx, top_k_indices]
             
             if generated is not None:
                 parent_indices = (top_k_indices // n_top_k_candidates).unsqueeze(2)
                 parent_indices = parent_indices.tile([1, 1, i])
-                parent_id = paddle.gather(generated, parent_indices, axis=1)
+                batch_idx_parent = paddle.arange(B).unsqueeze(1).unsqueeze(2).tile([1, k, i])
+                parent_id = generated[batch_idx_parent, parent_indices]
                 top_k_samples = paddle.concat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
 
                 next_sem_ids = top_k_samples.reshape([-1, top_k_samples.shape[-1]])
