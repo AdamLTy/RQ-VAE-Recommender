@@ -234,6 +234,13 @@ class SemanticIdTokenizer(nn.Layer):
                 B, N = batch.ids.shape
             sem_ids = self.rq_vae.get_semantic_ids(batch.x).sem_ids
             D = sem_ids.shape[-1]
+            # Reshape sem_ids to match expected format [B, N*D]
+            if batch.ids.ndim == 1:
+                # For item-level data, sem_ids should be [B, D]
+                sem_ids = sem_ids.reshape([B, D])
+            else:
+                # For sequence data, sem_ids should be [B, N*D]
+                sem_ids = sem_ids.reshape([B, N * D])
             # Create proper seq_mask when not using cached tokenization
             if batch.ids.ndim == 1:
                 # For item-level data, create a simple mask of ones
@@ -262,7 +269,13 @@ class SemanticIdTokenizer(nn.Layer):
 
             sem_ids_fut = self._tokenize_seq_batch_from_cached(batch.ids_fut)
         
-        token_type_ids = paddle.arange(D).tile([N]).unsqueeze(0).tile([B, 1])
+        # Handle both sequence data (2D) and item data (1D) from H5 dataset
+        if batch.ids.ndim == 1:
+            # For item-level data
+            token_type_ids = paddle.arange(D).unsqueeze(0).tile([B, 1])
+        else:
+            # For sequence data, repeat [0,1,2,...,D-1] for each sequence position
+            token_type_ids = paddle.arange(D).tile([N]).unsqueeze(0).tile([B, 1])
         token_type_ids_fut = paddle.arange(D).unsqueeze(0).tile([B, 1])
         return TokenizedSeqBatch(
             user_ids=batch.user_ids,
