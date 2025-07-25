@@ -242,18 +242,13 @@ class MultiHeadAttention(nn.Layer):
                 # Reshape for regular attention
                 batch_size, num_tokens, embed_dim = queries.shape
                 queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
+                
+                # For cross-attention, keys and values should use the same number of heads as queries
+                # since kv projection outputs 2 * d_out, we split it evenly for keys and values
                 keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 
                 dropout_p = 0. if not self.training else 0.0  # No dropout specified in constructor
-                
-                # Ensure consistent head dimensions for cross-attention
-                if queries.shape[1] != keys.shape[1]:  # num_heads mismatch
-                    # Repeat keys and values to match query heads
-                    head_ratio = queries.shape[1] // keys.shape[1]
-                    if head_ratio > 1:
-                        keys = keys.repeat_interleave(head_ratio, axis=1)
-                        values = values.repeat_interleave(head_ratio, axis=1)
                 
                 context_vec = paddle.nn.functional.scaled_dot_product_attention(
                     queries, keys, values, attn_mask=padding_mask, dropout_p=dropout_p, is_causal=is_causal)
