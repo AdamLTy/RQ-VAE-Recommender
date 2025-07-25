@@ -257,13 +257,13 @@ class SemanticIdTokenizer(nn.Layer):
                 B, N = batch.ids.shape
             _, D = self.cached_ids.shape
             sem_ids = self._tokenize_seq_batch_from_cached(batch.ids)
-            seq_mask = batch.seq_mask.repeat_interleave(D, axis=1)
+            seq_mask = batch.seq_mask.cast('int32').repeat_interleave(D, axis=1).cast('bool')
             sem_ids[~seq_mask] = -1
 
             sem_ids_fut = self._tokenize_seq_batch_from_cached(batch.ids_fut)
         
-        token_type_ids = paddle.arange(D).tile([B, N])
-        token_type_ids_fut = paddle.arange(D).tile([B, 1])
+        token_type_ids = paddle.arange(D).tile([N]).unsqueeze(0).tile([B, 1])
+        token_type_ids_fut = paddle.arange(D).unsqueeze(0).tile([B, 1])
         return TokenizedSeqBatch(
             user_ids=batch.user_ids,
             sem_ids=sem_ids,
