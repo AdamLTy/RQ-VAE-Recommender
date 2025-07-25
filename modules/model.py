@@ -95,7 +95,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
         self.out_proj = nn.Linear(attn_dim, num_embeddings, bias_attr=False)
     
     def _predict(self, batch: TokenizedSeqBatch) -> AttentionInput:
-        user_emb = self.user_id_embedder(batch.user_ids)
+        user_emb = self.user_id_embedder(batch.user_ids).unsqueeze(1)
         sem_ids_emb = self.sem_id_embedder(batch)
         sem_ids_emb, sem_ids_emb_fut = sem_ids_emb.seq, sem_ids_emb.fut
         seq_lengths = batch.seq_mask.sum(axis=1)
