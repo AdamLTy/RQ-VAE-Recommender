@@ -189,7 +189,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             # Create batch indices for gather operation
             batch_indices = paddle.arange(B).unsqueeze(1).tile([1, n_top_k_candidates])
             sampled_log_probas = paddle.log(probas_batched[batch_indices, samples_batched]).reshape([B, -1])
-            samples = samples_batched.reshape(B, -1)
+            samples = samples_batched.reshape([B, -1])
 
             # Get top-K:
             sorted_log_probas, sorted_indices = (
