@@ -104,21 +104,47 @@ class Quantize(nn.Layer):
         codebook = self.out_proj(self.embedding.weight)
         
         if self.distance_mode == QuantizeDistance.L2:
-            x_squared = paddle.sum(x**2, axis=-1, keepdim=True)
+            # Flatten x to 2D for distance computation if it's 3D
+            original_shape = x.shape
+            if len(original_shape) == 3:
+                x_flat = x.reshape([-1, original_shape[-1]])
+            else:
+                x_flat = x
+                
+            x_squared = paddle.sum(x_flat**2, axis=-1, keepdim=True)
             codebook_squared = paddle.sum(codebook**2, axis=-1, keepdim=True).T
-            cross_term = 2 * paddle.matmul(x, codebook.T)
-            dist = paddle.add(paddle.add(x_squared, codebook_squared), -cross_term)
+            cross_term = 2 * paddle.matmul(x_flat, codebook.T)
+            dist_flat = paddle.add(paddle.add(x_squared, codebook_squared), -cross_term)
+            
+            # Reshape dist back to original batch structure
+            if len(original_shape) == 3:
+                dist = dist_flat.reshape([original_shape[0], original_shape[1], -1])
+            else:
+                dist = dist_flat
         elif self.distance_mode == QuantizeDistance.COSINE:
-            dist = -(
+            # Flatten x to 2D for distance computation if it's 3D
+            original_shape = x.shape
+            if len(original_shape) == 3:
+                x_flat = x.reshape([-1, original_shape[-1]])
+            else:
+                x_flat = x
+                
+            dist_flat = -(
                 paddle.matmul(
-                    paddle.divide(x, paddle.norm(x, axis=1, keepdim=True)),
+                    paddle.divide(x_flat, paddle.norm(x_flat, axis=1, keepdim=True)),
                     paddle.divide(codebook.T, paddle.norm(codebook.T, axis=0, keepdim=True))
                 )
             )
+            
+            # Reshape dist back to original batch structure
+            if len(original_shape) == 3:
+                dist = dist_flat.reshape([original_shape[0], original_shape[1], -1])
+            else:
+                dist = dist_flat
         else:
             raise Exception("Unsupported Quantize distance mode.")
 
-        ids = (dist.detach()).argmin(axis=1)
+        ids = (dist.detach()).argmin(axis=-1)
 
         if self.training:
             if self.forward_mode == QuantizeForwardMode.GUMBEL_SOFTMAX:
@@ -138,12 +164,15 @@ class Quantize(nn.Layer):
                     x
                 )
                 emb_out = emb_out * (
-                    paddle.divide(paddle.norm(emb, p=2, axis=1, keepdim=True), paddle.add(paddle.norm(x, p=2, axis=1, keepdim=True), paddle.to_tensor(1e-6)))
+                    paddle.divide(paddle.norm(emb, p=2, axis=-1, keepdim=True), paddle.add(paddle.norm(x, p=2, axis=-1, keepdim=True), paddle.to_tensor(1e-6)))
                 ).detach()
             else:
                 raise Exception("Unsupported Quantize forward mode.")
             
-            loss = self.quantize_loss(query=x, value=emb)
+            if self.forward_mode == QuantizeForwardMode.GUMBEL_SOFTMAX:
+                loss = self.quantize_loss(query=x, value=emb)
+            else:
+                loss = self.quantize_loss(query=x, value=emb_out)
         
         else:
             emb_out = self.get_item_embeddings(ids)
