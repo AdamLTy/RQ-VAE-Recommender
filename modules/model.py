@@ -181,10 +181,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             probas_batched = F.softmax(logits / temperature, axis=-1)
             samples_batched = paddle.multinomial(probas_batched, num_samples=n_top_k_candidates)
             
-            # Debug shapes
-            print(f"probas_batched.shape: {probas_batched.shape}")
-            print(f"samples_batched.shape: {samples_batched.shape}")
-            print(f"B: {B}, n_top_k_candidates: {n_top_k_candidates}")
+            # Ensure samples_batched has the expected shape [B, n_top_k_candidates]
+            if samples_batched.shape != [B, n_top_k_candidates]:
+                samples_batched = samples_batched.reshape([B, n_top_k_candidates])
 
             if generated is None:
                 is_valid_prefix = self.inference_verifier_fn(samples_batched.unsqueeze(-1))
