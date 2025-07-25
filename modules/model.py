@@ -200,17 +200,18 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 paddle.add(-10000 * invalid_mask, sampled_log_probas),
                 repeated_log_probas
             )
-            sorted_indices = paddle.argsort(combined_scores, axis=-1, descending=True)
-            sorted_log_probas = paddle.gather(combined_scores, sorted_indices, axis=-1)
+            sorted_log_probas, sorted_indices = paddle.sort(combined_scores, axis=-1, descending=True)
 
             top_k_log_probas, top_k_indices = sorted_log_probas[:, :k], sorted_indices[:, :k]
             top_k_samples = paddle.gather(samples, top_k_indices, axis=1)
             
             if generated is not None:
-                parent_id = paddle.gather(generated, (top_k_indices // n_top_k_candidates).unsqueeze(2).expand([-1,-1,i]), axis=1)
+                parent_indices = (top_k_indices // n_top_k_candidates).unsqueeze(2)
+                parent_indices = parent_indices.tile([1, 1, i])
+                parent_id = paddle.gather(generated, parent_indices, axis=1)
                 top_k_samples = paddle.concat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
 
-                next_sem_ids = top_k_samples.flatten(end_dim=1)
+                next_sem_ids = top_k_samples.reshape([-1, top_k_samples.shape[-1]])
 
                 input_batch = TokenizedSeqBatch(
                     user_ids=input_batch.user_ids,
@@ -221,8 +222,10 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                     token_type_ids=input_batch.token_type_ids
                 )
 
-                generated = top_k_samples.detach().clone()
-                log_probas = top_k_log_probas.detach().clone()
+                generated = top_k_samples.detach()
+                generated = generated.clone()
+                log_probas = top_k_log_probas.detach()
+                log_probas = log_probas.clone()
             else:
                 next_sem_ids = top_k_samples.reshape(-1, 1)
 
@@ -254,7 +257,8 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 )
 
                 generated = top_k_samples.unsqueeze(-1)
-                log_probas = top_k_log_probas.detach().clone()
+                log_probas = top_k_log_probas.detach()
+                log_probas = log_probas.clone()
         
         return GenerationOutput(
             sem_ids=generated.squeeze(),
@@ -271,8 +275,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             predict_out = self.out_proj(trnsf_out)
             if self.jagged_mode:
                 # This works because batch.sem_ids_fut is fixed length, no padding.
-                logits = rearrange(jagged_to_flattened_tensor(predict_out), "(b n) d -> b n d", b=B)[:,:-1,:].flatten(end_dim=1)
-                target = batch.sem_ids_fut.flatten(end_dim=1)
+                logits_3d = rearrange(jagged_to_flattened_tensor(predict_out), "(b n) d -> b n d", b=B)[:,:-1,:]
+                logits = logits_3d.reshape([-1, logits_3d.shape[-1]])
+                target = batch.sem_ids_fut.reshape([-1])
                 unred_loss = rearrange(F.cross_entropy(logits, target, reduction="none", ignore_index=-1), "(b n) -> b n", b=B)
                 loss = unred_loss.sum(axis=1).mean()
             else:
