@@ -3,9 +3,9 @@ from paddle.optimizer.lr import LRScheduler
 
 
 class InverseSquareRootScheduler(LRScheduler):
-    def __init__(self, optimizer: Optimizer, warmup_steps: int, last_epoch: int = -1):
+    def __init__(self, learning_rate: float, warmup_steps: int, last_epoch: int = -1):
         self.warmup_steps = warmup_steps
-        super(InverseSquareRootScheduler, self).__init__(optimizer, last_epoch)
+        super(InverseSquareRootScheduler, self).__init__(learning_rate, last_epoch)
     
     def get_lr(self):
         step = self.last_epoch + 1
