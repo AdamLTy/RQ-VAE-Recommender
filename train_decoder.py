@@ -186,7 +186,7 @@ def train(
         for step in range(iterations):
             model.train()
             total_loss = 0
-            optimizer.zero_grad()
+            optimizer.clear_grad()
             for _ in range(gradient_accumulate_every):
                 data = next_batch(train_dataloader, device)
                 tokenized_data = tokenizer(data)
