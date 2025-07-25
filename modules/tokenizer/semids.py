@@ -76,7 +76,6 @@ class SemanticIdTokenizer(nn.Layer):
         
         # Save the cached IDs
         paddle.save(self.cached_ids, cache_path)
-        print(f"Cached IDs saved to {cache_path}")
     
     def load_cached_ids(self, cache_path: str) -> bool:
         """Load precomputed corpus IDs from file. Returns True if successful."""
@@ -85,10 +84,8 @@ class SemanticIdTokenizer(nn.Layer):
         
         try:
             self.cached_ids = paddle.load(cache_path)
-            print(f"Cached IDs loaded from {cache_path}, shape: {self.cached_ids.shape}")
             return True
         except Exception as e:
-            print(f"Failed to load cached IDs from {cache_path}: {e}")
             return False
     
     @property
@@ -98,14 +95,9 @@ class SemanticIdTokenizer(nn.Layer):
     @paddle.no_grad()
     @eval_mode
     def precompute_corpus_ids(self, movie_dataset: ItemData, cache_path: Optional[str] = None) -> Tensor:
-        print(f"[DEBUG] precompute_corpus_ids: Starting with dataset size {len(movie_dataset)}")
-        
         # Try to load from cache first
         if cache_path and self.load_cached_ids(cache_path):
-            print(f"[DEBUG] precompute_corpus_ids: Successfully loaded cached IDs from {cache_path}")
             return self.cached_ids
-        
-        print(f"[DEBUG] precompute_corpus_ids: No cache found or cache loading failed, computing corpus IDs...")
         cached_ids = None
         dedup_dim = []
         
@@ -131,60 +123,32 @@ class SemanticIdTokenizer(nn.Layer):
                 return batch[0] if batch else None
         
         dataloader = DataLoader(movie_dataset, batch_size=512, shuffle=False, collate_fn=collate_fn)
-        print(f"[DEBUG] precompute_corpus_ids: Created dataloader with batch_size=512")
         
         total_batches = len(dataloader)
-        print(f"[DEBUG] precompute_corpus_ids: Total batches to process: {total_batches}")
         
         batch_count = 0
         for batch in dataloader:
             batch_count += 1
-            if batch_count % 100 == 1 or batch_count <= 5:
-                print(f"[DEBUG] precompute_corpus_ids: Processing batch {batch_count}/{total_batches}")
-            if batch_count % 100 == 1 or batch_count <= 5:
-                print(f"[DEBUG] precompute_corpus_ids: Running forward pass for batch {batch_count}")
             batch_ids = self.forward(batch_to(batch, self.rq_vae.device)).sem_ids
-            if batch_count % 100 == 1 or batch_count <= 5:
-                print(f"[DEBUG] precompute_corpus_ids: Forward pass completed, batch_ids shape: {batch_ids.shape}")
             # Detect in-batch duplicates
-            if batch_count % 100 == 1 or batch_count <= 5:
-                print(f"[DEBUG] precompute_corpus_ids: Detecting in-batch duplicates for batch {batch_count}")
             is_hit = self._get_hits(batch_ids, batch_ids)
             hits = paddle.tril(is_hit, diagonal=-1).sum(axis=-1)
             assert hits.min() >= 0
-            if batch_count % 100 == 1 or batch_count <= 5:
-                print(f"[DEBUG] precompute_corpus_ids: In-batch duplicates detected, hits shape: {hits.shape}")
             if cached_ids is None:
-                if batch_count % 100 == 1 or batch_count <= 5:
-                    print(f"[DEBUG] precompute_corpus_ids: Initializing cached_ids for batch {batch_count}")
                 cached_ids = batch_ids.clone()
             else:
                 # Detect batch-cache duplicates
-                if batch_count % 100 == 1 or batch_count <= 5:
-                    print(f"[DEBUG] precompute_corpus_ids: Detecting batch-cache duplicates for batch {batch_count}, cached_ids shape: {cached_ids.shape}")
                 is_hit = self._get_hits(batch_ids, cached_ids)
                 hits += is_hit.sum(axis=-1)
                 cached_ids = pack([cached_ids, batch_ids], "* d")[0]
-                if batch_count % 100 == 1 or batch_count <= 5:
-                    print(f"[DEBUG] precompute_corpus_ids: Updated cached_ids shape: {cached_ids.shape}")
             dedup_dim.append(hits)
-            
-            if batch_count % 500 == 0:
-                print(f"[DEBUG] precompute_corpus_ids: Progress update - completed {batch_count}/{total_batches} batches")
-        print(f"[DEBUG] precompute_corpus_ids: Completed all {batch_count} batches, concatenating results")
         # Concatenate new column to deduplicate ids
-        print(f"[DEBUG] precompute_corpus_ids: Packing dedup_dim with {len(dedup_dim)} elements")
         dedup_dim_tensor = pack(dedup_dim, "*")[0]
-        print(f"[DEBUG] precompute_corpus_ids: dedup_dim_tensor shape: {dedup_dim_tensor.shape}")
-        print(f"[DEBUG] precompute_corpus_ids: Final packing with cached_ids shape: {cached_ids.shape}")
         self.cached_ids = pack([cached_ids, dedup_dim_tensor], "b *")[0]
-        print(f"[DEBUG] precompute_corpus_ids: Final cached_ids shape: {self.cached_ids.shape}")
         
         # Save to cache if cache_path is provided
         if cache_path:
             self.save_cached_ids(cache_path)
-        
-        print(f"[DEBUG] precompute_corpus_ids: Completed successfully")
         
         return self.cached_ids
 

@@ -82,7 +82,6 @@ def train(
         )
     
     # Use H5 sequence dataset for decoder training
-    print("Using H5 sequence dataset for decoder training")
     
     # Create sequence datasets for training and evaluation
     train_dataset = H5SequenceDataset(
@@ -186,7 +185,6 @@ def train(
 
     metrics_accumulator = TopKAccumulator(ks=[1, 5, 10])
     num_params = sum(p.numel() for p in model.parameters())
-    print(f"Device: {device}, Num Parameters: {num_params}")
     with tqdm(initial=start_iter, total=start_iter + iterations,
               disable=False) as pbar:
         for step in range(iterations):
@@ -288,8 +286,6 @@ def train(
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)
                 
                 eval_metrics = metrics_accumulator.reduce()
-                
-                print(eval_metrics)
                 if swanlab_logging:
                     swanlab.log(eval_metrics)
                 

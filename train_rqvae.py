@@ -54,7 +54,6 @@ def train(
     device = "gpu" if paddle.device.is_compiled_with_cuda() else "cpu"
     paddle.device.set_device(device)
 
-    print("Using H5 pretrained dataset")
     # Create dataset object for kmeans initialization and evaluation
     train_dataset = H5PretrainedDataset(
         item_data_path=h5_item_data_path,
@@ -109,7 +108,6 @@ def train(
     with h5py.File(h5_item_data_path, 'r') as f:
         h5_embedding_dim = f.attrs['embedding_dim']
     vae_input_dim = h5_embedding_dim
-    print(f"H5 dataset embedding dimension: {h5_embedding_dim}")
     
     # Use train_dataset for evaluation (same as original logic)
     index_dataset = train_dataset

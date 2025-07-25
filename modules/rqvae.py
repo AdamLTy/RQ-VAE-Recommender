@@ -103,7 +103,6 @@ class RqVae(nn.Layer):
     def load_pretrained(self, path: str) -> None:
         state = paddle.load(path)
         self.set_state_dict(state["model"])
-        print(f"---Loaded RQVAE Iter {state['iter']}---")
 
     def encode(self, x: Tensor) -> Tensor:
         return self.encoder(x)

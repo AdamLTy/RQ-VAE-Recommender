@@ -125,7 +125,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 input_embedding_fut = padded_to_jagged_tensor(input_embedding_fut, lengths=seq_lengths_fut, max_len=input_embedding_fut.shape[1])
             except RuntimeError as e:
                 if "active drivers" in str(e):
-                    print("Warning: Triton/CUDA not available, falling back to non-jagged mode")
                     self.jagged_mode = False
                 else:
                     raise e
@@ -181,9 +180,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
         for i in range(self.sem_id_dim):
             logits = self.forward(input_batch).logits
             
-            # Debug: print shapes to understand the issue
-            print(f"logits.shape: {logits.shape}")
-            print(f"Expected B: {B}")
             
             # If logits doesn't have the right batch size, fix it
             if len(logits.shape) == 2 and logits.shape[0] != B:
@@ -196,8 +192,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             probas_batched = F.softmax(logits / temperature, axis=-1)
             samples_batched = paddle.multinomial(probas_batched, num_samples=n_top_k_candidates)
             
-            print(f"probas_batched.shape: {probas_batched.shape}")
-            print(f"samples_batched.shape: {samples_batched.shape}")
 
             if generated is None:
                 # samples_batched has shape [B, n_top_k_candidates], we need to process each sample
@@ -291,7 +285,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                         self.transformer.cached_enc_output = padded_to_jagged_tensor(cache, lengths, max_len=cache.shape[1])
                     except RuntimeError as e:
                         if "active drivers" in str(e):
-                            print("Warning: Triton/CUDA not available during beam search, falling back to non-jagged mode")
                             self.jagged_mode = False
                         else:
                             raise e
@@ -320,10 +313,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
 
         trnsf_out = self._predict(batch)
         
-        # Debug: print training state
-        print(f"self.training: {self.training}")
-        print(f"self.enable_generation: {self.enable_generation}")
-        print(f"Taking training branch: {self.training or not self.enable_generation}")
         
         if self.training or not self.enable_generation:
             predict_out = self.out_proj(trnsf_out)
@@ -344,7 +333,6 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 self.transformer.cached_enc_output = None
             loss_d = unred_loss.mean(axis=0)
         elif self.jagged_mode:
-            print("Taking jagged generation branch")
             trnsf_out = trnsf_out.contiguous()
             # For generation, input_embedding_fut has uniform length across batch
             # So we can safely reshape the flattened output
@@ -353,11 +341,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             # Get the actual batch size from seq_mask instead of relying on division
             actual_B = seq_mask.shape[0]
             seq_len = flattened.shape[0] // actual_B  # Calculate sequence length
-            print(f"Generation: flattened.shape={flattened.shape}, actual_B={actual_B}, seq_len={seq_len}")
             reshaped = flattened.reshape([actual_B, seq_len, -1])  # [B, seq_len, d_model]
             trnsf_out_flattened = reshaped[:, -1, :]  # Get last token: [B, d_model]
             logits = self.out_proj(trnsf_out_flattened)
-            print(f"Generation logits.shape: {logits.shape}")
             loss = None
             loss_d = None
         else:
