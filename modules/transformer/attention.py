@@ -134,7 +134,7 @@ class Attend(nn.Layer):
     def forward(self, qkv: Tensor, is_causal: bool = False) -> Tensor:
         batch_size, num_tokens, embed_dim = qkv.shape
         # (b, num_tokens, 3 * embed_dim) --> (b, num_tokens, 3, num_heads, head_dim)
-        qkv = qkv.view(batch_size, num_tokens, 3, self.num_heads, self.head_dim)
+        qkv = qkv.reshape([batch_size, num_tokens, 3, self.num_heads, self.head_dim])
 
         # (b, num_tokens, 3, num_heads, head_dim) --> (3, b, num_heads, num_tokens, head_dim)
         qkv = qkv.permute(2, 0, 3, 1, 4)
