@@ -252,7 +252,17 @@ class SemanticIdTokenizer(nn.Layer):
                 else:
                     # Create default mask if no seq_mask in batch
                     seq_mask = paddle.ones([B, N * D], dtype='bool')
-            sem_ids_fut = None
+            # Generate semantic IDs for future items
+            if hasattr(batch, 'x_fut') and batch.x_fut is not None:
+                sem_ids_fut = self.rq_vae.get_semantic_ids(batch.x_fut).sem_ids
+                if batch.ids.ndim == 1:
+                    # For item-level data, sem_ids_fut should be [B, D]
+                    sem_ids_fut = sem_ids_fut.reshape([B, D])
+                else:
+                    # For sequence data, sem_ids_fut should be [B, D] (single future item)
+                    sem_ids_fut = sem_ids_fut.reshape([B, D])
+            else:
+                sem_ids_fut = None
         else:
             # Handle both sequence data (2D) and item data (1D) from H5 dataset  
             if batch.ids.ndim == 1:
