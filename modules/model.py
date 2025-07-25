@@ -193,7 +193,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
 
             # Get top-K:
             sorted_log_probas, sorted_indices = (
-                -10000*(~is_valid_prefix) +
+                -10000*(paddle.logical_not(is_valid_prefix)) +
                 sampled_log_probas +
                 maybe_repeat_interleave(log_probas, n_top_k_candidates, dim=1)
             ).sort(-1, descending=True)
