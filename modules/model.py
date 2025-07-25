@@ -161,7 +161,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
         
         assert self.enable_generation, "Model generation is not enabled"
 
-        B, N = batch.sem_ids.shape
+        # Get batch size from seq_mask which is more reliable in jagged mode
+        B = batch.seq_mask.shape[0]
+        N = batch.sem_ids.shape[1] if len(batch.sem_ids.shape) > 1 else batch.sem_ids.shape[0] // B
         generated = None
         log_probas = paddle.zeros([B, 1], dtype='float32')
         k = 32 if top_k else 1
@@ -302,9 +304,12 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             trnsf_out = trnsf_out.contiguous()
             # For generation, input_embedding_fut has uniform length across batch
             # So we can safely reshape the flattened output
-            flattened = jagged_to_flattened_tensor(trnsf_out)  # Shape: [B * seq_len, d_model]
-            seq_len = flattened.shape[0] // B  # Calculate sequence length
-            reshaped = flattened.reshape([B, seq_len, -1])  # [B, seq_len, d_model]
+            flattened = jagged_to_flattened_tensor(trnsf_out)  # Shape: [total_tokens, d_model]
+            
+            # Get the actual batch size from seq_mask instead of relying on division
+            actual_B = seq_mask.shape[0]
+            seq_len = flattened.shape[0] // actual_B  # Calculate sequence length
+            reshaped = flattened.reshape([actual_B, seq_len, -1])  # [B, seq_len, d_model]
             trnsf_out_flattened = reshaped[:, -1, :]  # Get last token: [B, d_model]
             logits = self.out_proj(trnsf_out_flattened)
             loss = None
