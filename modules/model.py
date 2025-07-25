@@ -145,7 +145,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             transformer_output = self.transformer(x=transformer_input, context=transformer_context, padding_mask=batch.seq_mask, jagged=self.jagged_mode)
         else:
             causal_mask = nn.Transformer.generate_square_subsequent_mask(self.transformer, transformer_input.shape[1])
-            transformer_output = self.transformer(src=transformer_context, tgt=transformer_input, tgt_is_causal=True, tgt_mask=causal_mask, src_key_padding_mask=f_mask, memory_key_padding_mask=f_mask)
+            transformer_output = self.transformer(x=transformer_input, context=transformer_context, padding_mask=f_mask, jagged=self.jagged_mode)
 
         return transformer_output
 
