@@ -272,7 +272,8 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 logits = predict_out
                 out = logits[:, :-1, :].flatten(start_axis=0, stop_axis=1)
                 target = batch.sem_ids_fut.flatten(start_axis=0, stop_axis=1)
-                loss = rearrange(F.cross_entropy(out, target, reduction="none", ignore_index=-1), "(b n) -> b n", b=B).sum(axis=1).mean()
+                unred_loss = rearrange(F.cross_entropy(out, target, reduction="none", ignore_index=-1), "(b n) -> b n", b=B)
+                loss = unred_loss.sum(axis=1).mean()
             if not self.training and self.jagged_mode:
                 self.transformer.cached_enc_output = None
             loss_d = unred_loss.mean(axis=0)
