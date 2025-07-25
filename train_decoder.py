@@ -271,8 +271,17 @@ def train(
             if (step+1) % full_eval_every == 0:
                 model.eval()
                 model.enable_generation = True
-                with tqdm(eval_dataloader, desc=f'Eval {step+1}', disable=False) as pbar_eval:
+                
+                # Limit evaluation to 50,000 data points
+                max_eval_samples = 50000
+                max_eval_batches = max_eval_samples // batch_size
+                eval_batch_count = 0
+                
+                with tqdm(eval_dataloader, desc=f'Eval {step+1} (50k samples)', disable=False) as pbar_eval:
                     for batch in pbar_eval:
+                        if eval_batch_count >= max_eval_batches:
+                            break
+                            
                         data = batch_to(batch, device)
                         tokenized_data = tokenizer(data)
 
@@ -284,6 +293,7 @@ def train(
                         actual, top_k = tokenized_data.sem_ids_fut, generated.sem_ids
 
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)
+                        eval_batch_count += 1
                 
                 eval_metrics = metrics_accumulator.reduce()
                 if swanlab_logging:
