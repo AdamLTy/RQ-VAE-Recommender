@@ -186,7 +186,9 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 prefix = paddle.concat([generated.flatten([0,1]).unsqueeze(1).tile([1, n_top_k_candidates, 1]), samples_batched.unsqueeze(-1)], axis=-1)
                 is_valid_prefix = self.inference_verifier_fn(prefix).reshape(B, -1)
             
-            sampled_log_probas = paddle.log(paddle.gather(probas_batched, samples_batched, axis=1)).reshape([B, -1])
+            # Create batch indices for gather operation
+            batch_indices = paddle.arange(B).unsqueeze(1).tile([1, n_top_k_candidates])
+            sampled_log_probas = paddle.log(probas_batched[batch_indices, samples_batched]).reshape([B, -1])
             samples = samples_batched.reshape(B, -1)
 
             # Get top-K:
