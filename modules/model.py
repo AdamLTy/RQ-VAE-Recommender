@@ -192,11 +192,14 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             samples = samples_batched.reshape([B, -1])
 
             # Get top-K:
-            sorted_log_probas, sorted_indices = (
-                -10000*(paddle.logical_not(is_valid_prefix)) +
-                sampled_log_probas +
-                maybe_repeat_interleave(log_probas, n_top_k_candidates, dim=1)
-            ).sort(-1, descending=True)
+            invalid_mask = paddle.logical_not(is_valid_prefix).astype('float32')
+            repeated_log_probas = maybe_repeat_interleave(log_probas, n_top_k_candidates, dim=1)
+            
+            combined_scores = paddle.add(
+                paddle.add(-10000 * invalid_mask, sampled_log_probas),
+                repeated_log_probas
+            )
+            sorted_log_probas, sorted_indices = combined_scores.sort(-1, descending=True)
 
             top_k_log_probas, top_k_indices = sorted_log_probas[:, :k], sorted_indices[:, :k]
             top_k_samples = paddle.gather(samples, top_k_indices, axis=1)
