@@ -220,7 +220,21 @@ class EncoderDecoderRetrievalModel(nn.Layer):
 
             # Get top-K:
             invalid_mask = paddle.logical_not(is_valid_prefix).astype('float32')
-            repeated_log_probas = maybe_repeat_interleave(log_probas, n_top_k_candidates, dim=1)
+            # Ensure repeated_log_probas has shape [B, n_top_k_candidates]
+            if log_probas.shape[1] == 1:
+                repeated_log_probas = maybe_repeat_interleave(log_probas, n_top_k_candidates, dim=1)
+            else:
+                # log_probas already has multiple candidates, tile it to match n_top_k_candidates
+                repeat_factor = n_top_k_candidates // log_probas.shape[1]
+                repeated_log_probas = paddle.tile(log_probas, [1, repeat_factor])
+                if repeated_log_probas.shape[1] < n_top_k_candidates:
+                    # Pad if needed
+                    padding_needed = n_top_k_candidates - repeated_log_probas.shape[1]
+                    padding = repeated_log_probas[:, :padding_needed]
+                    repeated_log_probas = paddle.concat([repeated_log_probas, padding], axis=1)
+                elif repeated_log_probas.shape[1] > n_top_k_candidates:
+                    # Truncate if needed
+                    repeated_log_probas = repeated_log_probas[:, :n_top_k_candidates]
             
             combined_scores = paddle.add(
                 paddle.add(-10000 * invalid_mask, sampled_log_probas),
