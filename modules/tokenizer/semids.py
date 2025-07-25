@@ -234,7 +234,18 @@ class SemanticIdTokenizer(nn.Layer):
                 B, N = batch.ids.shape
             sem_ids = self.rq_vae.get_semantic_ids(batch.x).sem_ids
             D = sem_ids.shape[-1]
-            seq_mask, sem_ids_fut = None, None
+            # Create proper seq_mask when not using cached tokenization
+            if batch.ids.ndim == 1:
+                # For item-level data, create a simple mask of ones
+                seq_mask = paddle.ones([B, D], dtype='bool')
+            else:
+                # For sequence data, expand the original sequence mask to semantic dimensions
+                if hasattr(batch, 'seq_mask') and batch.seq_mask is not None:
+                    seq_mask = batch.seq_mask.repeat_interleave(D, dim=1)
+                else:
+                    # Create default mask if no seq_mask in batch
+                    seq_mask = paddle.ones([B, N * D], dtype='bool')
+            sem_ids_fut = None
         else:
             # Handle both sequence data (2D) and item data (1D) from H5 dataset  
             if batch.ids.ndim == 1:
