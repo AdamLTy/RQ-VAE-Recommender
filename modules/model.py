@@ -202,16 +202,13 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             if generated is None:
                 is_valid_prefix = self.inference_verifier_fn(samples_batched.unsqueeze(-1))
             else:
-                generated_expanded = generated.flatten(0, 1).unsqueeze(1).tile([1, n_top_k_candidates, 1])
-                samples_expanded = samples_batched.unsqueeze(-1)
+                # generated has shape [B, current_length] - reshape correctly for concatenation
+                generated_expanded = generated.unsqueeze(1).tile([1, n_top_k_candidates, 1])  # [B, n_top_k_candidates, current_length]
+                generated_expanded = generated_expanded.reshape([B * n_top_k_candidates, -1, 1])  # [B*n_top_k_candidates, current_length, 1]
+                samples_expanded = samples_batched.unsqueeze(-1)  # [B, n_top_k_candidates] -> [B, n_top_k_candidates, 1]
+                samples_expanded = samples_expanded.reshape([B * n_top_k_candidates, 1, 1])  # [B*n_top_k_candidates, 1, 1]
                 
-                # Ensure both tensors have the same batch size
-                if generated_expanded.shape[0] != samples_expanded.shape[0]:
-                    # Reshape generated to match batch size
-                    generated_expanded = generated_expanded.reshape([B, -1, generated_expanded.shape[-1]])
-                    generated_expanded = generated_expanded.flatten(0, 1).unsqueeze(1).tile([1, n_top_k_candidates, 1])
-                
-                prefix = paddle.concat([generated_expanded, samples_expanded], axis=-1)
+                prefix = paddle.concat([generated_expanded, samples_expanded], axis=1)  # concat along sequence dimension
                 is_valid_prefix = self.inference_verifier_fn(prefix).reshape([B, -1])
             
             # Create batch indices for gather operation
