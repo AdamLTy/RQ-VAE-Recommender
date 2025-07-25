@@ -137,7 +137,7 @@ class Attend(nn.Layer):
         qkv = qkv.reshape([batch_size, num_tokens, 3, self.num_heads, self.head_dim])
 
         # (b, num_tokens, 3, num_heads, head_dim) --> (3, b, num_heads, num_tokens, head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
+        qkv = qkv.transpose([2, 0, 3, 1, 4])
 
         # (3, b, num_heads, num_tokens, head_dim) -> 3 times (b, num_heads, num_tokens, head_dim)
         queries, keys, values = qkv
