@@ -240,6 +240,21 @@ class MultiHeadAttention(nn.Layer):
                 # For cross attention, we need to handle queries, keys, values separately
                 # Reshape for regular attention
                 batch_size, num_tokens, embed_dim = queries.shape
+                kv_batch_size, kv_num_tokens, kv_embed_dim = keys.shape
+                
+                # Ensure batch dimensions match for cross-attention
+                if batch_size != kv_batch_size:
+                    # If keys/values have smaller batch size, expand to match queries
+                    if kv_batch_size == 1 and batch_size > 1:
+                        keys = keys.expand([batch_size, kv_num_tokens, kv_embed_dim])
+                        values = values.expand([batch_size, kv_num_tokens, kv_embed_dim])
+                    # If queries have smaller batch size, expand to match keys/values
+                    elif batch_size == 1 and kv_batch_size > 1:
+                        queries = queries.expand([kv_batch_size, num_tokens, embed_dim])
+                        batch_size = kv_batch_size
+                    else:
+                        raise ValueError(f"Incompatible batch sizes in cross-attention: queries={batch_size}, keys/values={kv_batch_size}")
+                
                 queries = queries.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 
                 # For cross-attention, keys and values should use the same number of heads as queries
