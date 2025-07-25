@@ -294,7 +294,12 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             loss_d = unred_loss.mean(axis=0)
         elif self.jagged_mode:
             trnsf_out = trnsf_out.contiguous()
-            trnsf_out_flattened = rearrange(jagged_to_flattened_tensor(trnsf_out), "(b n) d -> b n d", b=B)[:,-1,:]
+            # For generation, input_embedding_fut has uniform length across batch
+            # So we can safely reshape the flattened output
+            flattened = jagged_to_flattened_tensor(trnsf_out)  # Shape: [B * seq_len, d_model]
+            seq_len = flattened.shape[0] // B  # Calculate sequence length
+            reshaped = flattened.reshape([B, seq_len, -1])  # [B, seq_len, d_model]
+            trnsf_out_flattened = reshaped[:, -1, :]  # Get last token: [B, d_model]
             logits = self.out_proj(trnsf_out_flattened)
             loss = None
             loss_d = None
