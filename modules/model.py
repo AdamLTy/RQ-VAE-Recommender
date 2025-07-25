@@ -253,12 +253,11 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             top_k_samples = samples[batch_idx, top_k_indices]
             
             if generated is not None:
-                parent_indices = (top_k_indices // n_top_k_candidates).unsqueeze(2)
-                parent_indices = parent_indices.tile([1, 1, i])
-                batch_idx_parent = paddle.arange(B).unsqueeze(1).unsqueeze(2).tile([1, k, i])
-                parent_id = generated[batch_idx_parent, parent_indices]
-                # Reshape parent_id to match expected dimensions [B, k, i]
-                parent_id = parent_id.reshape([B, k, i])
+                parent_indices = (top_k_indices // n_top_k_candidates)  # [B, k]
+                # Expand parent_indices to select from generated sequences
+                batch_idx_parent = paddle.arange(B).unsqueeze(1).tile([1, k])  # [B, k]
+                # Use advanced indexing to get parent sequences
+                parent_id = generated[batch_idx_parent, parent_indices]  # [B, k, i]
                 top_k_samples = paddle.concat([parent_id, top_k_samples.unsqueeze(-1)], axis=-1)
 
                 next_sem_ids = top_k_samples.reshape([-1, top_k_samples.shape[-1]])
