@@ -194,16 +194,36 @@ class SemanticIdTokenizer(nn.Layer):
         if self.cached_ids is None:
             raise Exception("No match can be found in empty cache.")
 
-        prefix_length = sem_id_prefix.shape[-1]
-        prefix_cache = self.cached_ids[:, :prefix_length]
-        out = paddle.zeros(sem_id_prefix.shape[:-1], dtype=paddle.bool)
+        # Reshape flattened semantic ID sequences to match cache structure
+        # sem_id_prefix shape: [B, seq_len] where seq_len = n_items * n_layers
+        # We need to reshape to [B, n_items, n_layers] to match cached_ids [num_items, n_layers]
+        batch_size = sem_id_prefix.shape[0]
+        seq_len = sem_id_prefix.shape[-1]
+        n_layers = self.cached_ids.shape[-1]  # This should be 4
         
-        # Batch prefixes matching to avoid OOM. 
-        batches = math.ceil(sem_id_prefix.shape[0] // BATCH_SIZE)
-        for i in range(batches):
-            prefixes = sem_id_prefix[i*BATCH_SIZE:(i+1)*BATCH_SIZE,...]
-            matches = (prefixes.unsqueeze(-2) == prefix_cache.unsqueeze(-3)).all(axis=-1).any(axis=-1)
-            out[i*BATCH_SIZE:(i+1)*BATCH_SIZE,...] = matches
+        # Check if sequence length is divisible by n_layers
+        if seq_len % n_layers != 0:
+            return paddle.zeros([batch_size], dtype=paddle.bool)
+        
+        n_items = seq_len // n_layers
+        sem_id_prefix_reshaped = sem_id_prefix.reshape([batch_size, n_items, n_layers])
+        
+        out = paddle.zeros([batch_size], dtype=paddle.bool)
+        
+        # Check each item in the sequence to see if it exists in cache
+        for item_idx in range(n_items):
+            item_ids = sem_id_prefix_reshaped[:, item_idx, :]  # [B, n_layers]
+            
+            # Batch matching to avoid OOM
+            batches = math.ceil(batch_size // BATCH_SIZE)
+            for i in range(batches):
+                start_idx = i * BATCH_SIZE
+                end_idx = min((i + 1) * BATCH_SIZE, batch_size)
+                batch_ids = item_ids[start_idx:end_idx]  # [batch_size_chunk, n_layers]
+                
+                # Check if any cached item matches
+                matches = (batch_ids.unsqueeze(1) == self.cached_ids.unsqueeze(0)).all(axis=-1).any(axis=-1)
+                out[start_idx:end_idx] = out[start_idx:end_idx] | matches
         
         return out
     
