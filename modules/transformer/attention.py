@@ -148,7 +148,10 @@ class Attend(nn.Layer):
             queries, keys, values, attn_mask=None, dropout_p=use_dropout, is_causal=is_causal)
 
         # Combine heads, where self.d_out = self.num_heads * self.head_dim
-        context_vec = context_vec.transpose([1, 2]).contiguous().view([batch_size, num_tokens, self.d_out])
+        context_vec = context_vec.transpose([1, 2]).contiguous()
+        # Get actual batch size from the context_vec tensor
+        actual_batch_size = context_vec.shape[0]
+        context_vec = context_vec.view([actual_batch_size, num_tokens, self.d_out])
         return context_vec
 
 
