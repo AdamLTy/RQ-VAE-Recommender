@@ -200,23 +200,28 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             print(f"samples_batched.shape: {samples_batched.shape}")
 
             if generated is None:
-                is_valid_prefix = self.inference_verifier_fn(samples_batched.unsqueeze(-1))
+                # samples_batched has shape [B, n_top_k_candidates], we need to process each sample
+                samples_input = samples_batched.unsqueeze(-1)  # [B, n_top_k_candidates, 1]
+                # Reshape to [B*n_top_k_candidates, 1] for batch processing
+                samples_flat = samples_input.reshape([B * n_top_k_candidates, 1])
+                is_valid_prefix_flat = self.inference_verifier_fn(samples_flat)
+                is_valid_prefix = is_valid_prefix_flat.reshape([B, n_top_k_candidates])
             else:
                 # generated has shape [B, current_length] - reshape correctly for concatenation
                 generated_expanded = generated.unsqueeze(1).tile([1, n_top_k_candidates, 1])  # [B, n_top_k_candidates, current_length]
-                generated_expanded = generated_expanded.reshape([B * n_top_k_candidates, -1, 1])  # [B*n_top_k_candidates, current_length, 1]
-                samples_expanded = samples_batched.unsqueeze(-1)  # [B, n_top_k_candidates] -> [B, n_top_k_candidates, 1]
-                samples_expanded = samples_expanded.reshape([B * n_top_k_candidates, 1, 1])  # [B*n_top_k_candidates, 1, 1]
+                generated_expanded = generated_expanded.reshape([B * n_top_k_candidates, -1])  # [B*n_top_k_candidates, current_length]
+                samples_expanded = samples_batched.reshape([B * n_top_k_candidates, 1])  # [B*n_top_k_candidates, 1]
                 
                 prefix = paddle.concat([generated_expanded, samples_expanded], axis=1)  # concat along sequence dimension
-                is_valid_prefix = self.inference_verifier_fn(prefix).reshape([B, -1])
+                is_valid_prefix_flat = self.inference_verifier_fn(prefix)
+                is_valid_prefix = is_valid_prefix_flat.reshape([B, n_top_k_candidates])
             
             # Create batch indices for gather operation
             batch_indices = paddle.arange(B).unsqueeze(1).tile([1, n_top_k_candidates]).reshape([-1])
             # Use gather_nd for 2D indexing - samples_batched has shape [B, n_top_k_candidates]
             indices = paddle.stack([batch_indices, samples_batched.reshape([-1])], axis=-1)
-            sampled_log_probas = paddle.log(paddle.gather_nd(probas_batched, indices)).reshape([B, -1])
-            samples = samples_batched.reshape([B, -1])
+            sampled_log_probas = paddle.log(paddle.gather_nd(probas_batched, indices)).reshape([B, n_top_k_candidates])
+            samples = samples_batched  # Keep original shape [B, n_top_k_candidates]
 
             # Get top-K:
             invalid_mask = paddle.logical_not(is_valid_prefix).astype('float32')
