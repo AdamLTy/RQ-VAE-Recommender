@@ -208,9 +208,6 @@ class MultiHeadAttention(nn.Layer):
         if self.cross_attn:
             queries = self.q(x)
             keys, values = self.kv(x_kv).chunk(2, axis=-1)
-            # Debug: print tensor shapes for cross-attention
-            print(f"Cross-attention shapes - queries: {queries.shape}, keys: {keys.shape}, values: {values.shape}")
-            print(f"Cross-attention - num_heads: {self.num_heads}, head_dim: {self.head_dim}")
         else:
             queries, keys, values = self.qkv(x).chunk(3, axis=-1)
         
@@ -248,16 +245,33 @@ class MultiHeadAttention(nn.Layer):
                 
                 # For cross-attention, keys and values should use the same number of heads as queries
                 # since kv projection outputs 2 * d_out, we split it evenly for keys and values
-                print(f"Before unflatten - keys.shape[-1]: {keys.shape[-1]}, expected: {self.num_heads * self.head_dim}")
-                print(f"Before unflatten - values.shape[-1]: {values.shape[-1]}, expected: {self.num_heads * self.head_dim}")
                 keys = keys.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
                 values = values.unflatten(-1, [self.num_heads, self.head_dim]).transpose([0, 2, 1, 3])
-                print(f"After unflatten - queries: {queries.shape}, keys: {keys.shape}, values: {values.shape}")
                 
                 dropout_p = 0. if not self.training else 0.0  # No dropout specified in constructor
                 
-                context_vec = paddle.nn.functional.scaled_dot_product_attention(
-                    queries, keys, values, attn_mask=padding_mask, dropout_p=dropout_p, is_causal=is_causal)
+                # Use manual attention computation instead of Flash Attention for cross-attention
+                # to avoid Flash Attention constraints
+                scale = 1.0 / (self.head_dim ** 0.5)
+                attn_weights = paddle.matmul(queries, keys.transpose([0, 1, 3, 2])) * scale
+                
+                if padding_mask is not None:
+                    # Expand padding mask for multi-head attention
+                    # padding_mask shape: [batch_size, seq_len] -> [batch_size, 1, 1, seq_len]
+                    expanded_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+                    attn_weights = attn_weights.masked_fill(expanded_mask == 0, float('-inf'))
+                
+                if is_causal and queries.shape[2] > 1:
+                    # Apply causal mask for autoregressive attention
+                    causal_mask = paddle.tril(paddle.ones([queries.shape[2], keys.shape[2]]))
+                    attn_weights = attn_weights.masked_fill(causal_mask == 0, float('-inf'))
+                
+                attn_weights = paddle.nn.functional.softmax(attn_weights, axis=-1)
+                
+                if dropout_p > 0:
+                    attn_weights = paddle.nn.functional.dropout(attn_weights, p=dropout_p, training=self.training)
+                
+                context_vec = paddle.matmul(attn_weights, values)
                 
                 context_vec = context_vec.transpose([0, 2, 1, 3]).flatten(-2)
             else:
