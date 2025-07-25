@@ -241,7 +241,7 @@ class SemanticIdTokenizer(nn.Layer):
             else:
                 # For sequence data, expand the original sequence mask to semantic dimensions
                 if hasattr(batch, 'seq_mask') and batch.seq_mask is not None:
-                    seq_mask = batch.seq_mask.repeat_interleave(D, dim=1)
+                    seq_mask = batch.seq_mask.repeat_interleave(D, axis=1)
                 else:
                     # Create default mask if no seq_mask in batch
                     seq_mask = paddle.ones([B, N * D], dtype='bool')
@@ -257,7 +257,7 @@ class SemanticIdTokenizer(nn.Layer):
                 B, N = batch.ids.shape
             _, D = self.cached_ids.shape
             sem_ids = self._tokenize_seq_batch_from_cached(batch.ids)
-            seq_mask = batch.seq_mask.repeat_interleave(D, dim=1)
+            seq_mask = batch.seq_mask.repeat_interleave(D, axis=1)
             sem_ids[~seq_mask] = -1
 
             sem_ids_fut = self._tokenize_seq_batch_from_cached(batch.ids_fut)
