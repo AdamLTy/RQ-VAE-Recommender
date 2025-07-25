@@ -235,8 +235,7 @@ class MultiHeadAttention(nn.Layer):
         
         elif jagged:
             context_vec = self.attend.jagged_forward(queries, keys, values, is_causal=is_causal)
-
-        if not jagged:
+        else:
             if self.cross_attn:
                 # For cross attention, we need to handle queries, keys, values separately
                 # Reshape for regular attention
