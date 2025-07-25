@@ -24,14 +24,16 @@ class TopKAccumulator:
         pos_match = (rearrange(actual_truncated, "b d -> b 1 d") == top_k_truncated)
         for i in range(D):
             all_match = pos_match[...,:i+1].all(axis=-1).astype('int32')
-            match_found, rank = all_match.max(axis=-1)
+            match_found = all_match.max(axis=-1)
+            rank = all_match.argmax(axis=-1)
             match_found = match_found.astype('bool')
             matched_rank = rank[match_found]
             for k in self.ks:
                 self.metrics[f"h@{k}_slice_:{i+1}"] += len(matched_rank[matched_rank < k])
             
             all_match = pos_match[...,i:i+1].all(axis=-1).astype('int32')
-            match_found, rank = all_match.max(axis=-1)
+            match_found = all_match.max(axis=-1)
+            rank = all_match.argmax(axis=-1)
             match_found = match_found.astype('bool')
             matched_rank = rank[match_found]
             for k in self.ks:
