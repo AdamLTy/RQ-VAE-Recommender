@@ -200,7 +200,8 @@ class EncoderDecoderRetrievalModel(nn.Layer):
                 paddle.add(-10000 * invalid_mask, sampled_log_probas),
                 repeated_log_probas
             )
-            sorted_log_probas, sorted_indices = paddle.sort(combined_scores, axis=-1, descending=True)
+            sorted_log_probas = paddle.sort(combined_scores, axis=-1, descending=True)
+            sorted_indices = paddle.argsort(combined_scores, axis=-1, descending=True)
 
             top_k_log_probas, top_k_indices = sorted_log_probas[:, :k], sorted_indices[:, :k]
             top_k_samples = paddle.gather(samples, top_k_indices, axis=1)
