@@ -177,7 +177,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
 
         for i in range(self.sem_id_dim):
             logits = self.forward(input_batch).logits
-            probas_batched = F.softmax(logits / temperature, dim=-1)
+            probas_batched = F.softmax(logits / temperature, axis=-1)
             samples_batched = paddle.multinomial(probas_batched, num_samples=n_top_k_candidates)
 
             if generated is None:
