@@ -241,7 +241,7 @@ class SemanticIdTokenizer(nn.Layer):
             else:
                 # For sequence data, expand the original sequence mask to semantic dimensions
                 if hasattr(batch, 'seq_mask') and batch.seq_mask is not None:
-                    seq_mask = batch.seq_mask.repeat_interleave(D, axis=1)
+                    seq_mask = batch.seq_mask.cast('int32').repeat_interleave(D, axis=1).cast('bool')
                 else:
                     # Create default mask if no seq_mask in batch
                     seq_mask = paddle.ones([B, N * D], dtype='bool')
