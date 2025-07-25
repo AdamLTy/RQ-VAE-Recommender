@@ -184,7 +184,7 @@ class EncoderDecoderRetrievalModel(nn.Layer):
             if generated is None:
                 is_valid_prefix = self.inference_verifier_fn(samples_batched.unsqueeze(-1))
             else:
-                prefix = paddle.concat([generated.flatten([0,1]).unsqueeze(1).tile([1, n_top_k_candidates, 1]), samples_batched.unsqueeze(-1)], axis=-1)
+                prefix = paddle.concat([generated.flatten(0, 1).unsqueeze(1).tile([1, n_top_k_candidates, 1]), samples_batched.unsqueeze(-1)], axis=-1)
                 is_valid_prefix = self.inference_verifier_fn(prefix).reshape(B, -1)
             
             # Create batch indices for gather operation
