@@ -64,7 +64,9 @@ def train(
     h5_item_data_path="data/preprocessed/item_data.h5",
     h5_max_seq_len=200,
     # Corpus IDs caching
-    corpus_ids_cache_path="cache/corpus_ids.pkl"
+    corpus_ids_cache_path="cache/corpus_ids.pkl",
+    # Mixed precision training
+    amp=True
 ):  
 
     if swanlab_logging:
@@ -168,6 +170,10 @@ def train(
         weight_decay=weight_decay
     )
     
+    # Initialize AMP scaler if using mixed precision
+    if amp:
+        scaler = paddle.amp.GradScaler(init_loss_scaling=1024)
+    
     start_iter = 0
     if pretrained_decoder_path is not None:
         checkpoint = paddle.load(pretrained_decoder_path)
@@ -191,19 +197,36 @@ def train(
                 data = next_batch(train_dataloader, device)
                 tokenized_data = tokenizer(data)
 
-                model_output = model(tokenized_data)
-                loss = model_output.loss / gradient_accumulate_every
-                total_loss += loss
-                
-                if swanlab_logging:
-                    train_debug_metrics = compute_debug_metrics(tokenized_data, model_output)
+                if amp:
+                    with paddle.amp.auto_cast():
+                        model_output = model(tokenized_data)
+                        loss = model_output.loss / gradient_accumulate_every
+                    total_loss += loss
+                    
+                    if swanlab_logging:
+                        train_debug_metrics = compute_debug_metrics(tokenized_data, model_output)
 
-                total_loss.backward()
+                    scaled_loss = scaler.scale(loss)
+                    scaled_loss.backward()
+                else:
+                    model_output = model(tokenized_data)
+                    loss = model_output.loss / gradient_accumulate_every
+                    total_loss += loss
+                    
+                    if swanlab_logging:
+                        train_debug_metrics = compute_debug_metrics(tokenized_data, model_output)
+
+                    loss.backward()
+                    
                 assert model.sem_id_embedder.emb.weight.grad is not None
 
             pbar.set_description(f'loss: {total_loss.item():.4f}')
 
-            optimizer.step()
+            if amp:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
             lr_scheduler.step()
 
             if (step+1) % partial_eval_every == 0:
@@ -221,7 +244,11 @@ def train(
                     tokenized_data = tokenizer(data)
 
                     with paddle.no_grad():
-                        model_output_eval = model(tokenized_data)
+                        if amp:
+                            with paddle.amp.auto_cast():
+                                model_output_eval = model(tokenized_data)
+                        else:
+                            model_output_eval = model(tokenized_data)
                         eval_losses.append(model_output_eval.loss.detach().cpu().item())
 
                     if swanlab_logging:
@@ -251,7 +278,11 @@ def train(
                         data = batch_to(batch, device)
                         tokenized_data = tokenizer(data)
 
-                        generated = model.generate_next_sem_id(tokenized_data, top_k=True, temperature=1)
+                        if amp:
+                            with paddle.amp.auto_cast():
+                                generated = model.generate_next_sem_id(tokenized_data, top_k=True, temperature=1)
+                        else:
+                            generated = model.generate_next_sem_id(tokenized_data, top_k=True, temperature=1)
                         actual, top_k = tokenized_data.sem_ids_fut, generated.sem_ids
 
                         metrics_accumulator.accumulate(actual=actual, top_k=top_k)

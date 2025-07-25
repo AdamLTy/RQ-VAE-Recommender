@@ -24,3 +24,4 @@ train.attn_embed_dim=512
 train.attn_layers=8
 train.decoder_embed_dim=128
 train.model_jagged_mode=True
+train.amp=True
