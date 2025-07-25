@@ -158,7 +158,7 @@ def train(
     )
 
     lr_scheduler = InverseSquareRootScheduler(
-        learning_rate=learning_rate,
+        optimizer=optimizer,
         warmup_steps=10000
     )
     
