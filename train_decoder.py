@@ -157,16 +157,19 @@ def train(
         jagged_mode=model_jagged_mode
     )
 
+    optimizer = AdamW(
+        parameters=model.parameters(),
+        learning_rate=learning_rate,
+        weight_decay=weight_decay
+    )
+    
     lr_scheduler = InverseSquareRootScheduler(
         optimizer=optimizer,
         warmup_steps=10000
     )
     
-    optimizer = AdamW(
-        parameters=model.parameters(),
-        learning_rate=lr_scheduler,
-        weight_decay=weight_decay
-    )
+    # Update optimizer to use the scheduler
+    optimizer.param_groups[0]['lr'] = lr_scheduler
     
     start_iter = 0
     if pretrained_decoder_path is not None:
